@@ -3,15 +3,15 @@ import pandas as pd
 import numpy as np
 import os
 
-# Konfigurasi Halaman (Sidebar dimulai dalam keadaan Terbuka, tapi bisa di-minimize 1 klik)
+# Konfigurasi Halaman
 st.set_page_config(
     page_title="SPPG Procurement Engine | Koperasi YK",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="expanded" # Lebih nyaman agar menu langsung terlihat, bisa di-minimize via ikon '<'
+    initial_sidebar_state="expanded"
 )
 
-# Custom CSS
+# Custom CSS untuk Table Styling (Zebra Striping & Cards)
 st.markdown("""
 <style>
     .header-card {
@@ -22,16 +22,35 @@ st.markdown("""
         margin-bottom: 1.5rem;
         box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
     }
-    .status-badge {
-        display: inline-block;
-        padding: 0.35em 0.65em;
-        font-size: 80%;
-        font-weight: 600;
-        border-radius: 20px;
-        color: #065f46;
-        background-color: #d1fae5;
+    
+    /* Custom Styling Baris Tabel Selang-Seling */
+    .table-header {
+        background-color: #1e293b;
+        color: white;
+        padding: 10px;
+        font-weight: bold;
+        border-radius: 6px;
+        margin-bottom: 8px;
     }
-    /* Styling Tombol Menu Sidebar */
+    
+    .row-even {
+        background-color: #f8fafc;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 4px;
+        border: 1px solid #e2e8f0;
+        align-items: center;
+    }
+    
+    .row-odd {
+        background-color: #ffffff;
+        padding: 8px 10px;
+        border-radius: 6px;
+        margin-bottom: 4px;
+        border: 1px solid #e2e8f0;
+        align-items: center;
+    }
+
     .stSidebar [data-testid="stRadioButton"] > label {
         display: none;
     }
@@ -175,7 +194,7 @@ def open_delete_dapur_dialog(index):
             st.success("Data dapur berhasil dihapus!")
             st.rerun()
 
-# --- SIDEBAR: NAVIGASI MODUL OPERASIONAL (STAY ON SIDE & CAN BE MINIMIZED) ---
+# --- SIDEBAR NAVIGASI ---
 with st.sidebar:
     st.markdown("### ⚡ **SPPG Engine**")
     st.caption("Koperasi YK")
@@ -192,15 +211,9 @@ with st.sidebar:
         "📈 HET & Komparasi Pasar"
     ]
     
-    menu = st.radio(
-        "Pilih Modul:",
-        modul_options,
-        index=1  # Default langsung ke Kelola Data Dapur
-    )
-    
+    menu = st.radio("Pilih Modul:", modul_options, index=1)
     st.markdown("---")
     st.caption(f"Status Data: 🟢 {file_status}")
-    st.info("💡 **Tips:** Klik ikon panah **`<`** di atas sidebar ini untuk **minimize/menyembunyikan** menu agar layar menjadi penuh.")
 
 # --- HEADER UTAMA ---
 st.markdown(f"""
@@ -244,44 +257,64 @@ if menu == "🏬 Kelola Data Dapur":
         
     st.markdown("---")
     
-    # --- TABEL DATA DAPUR ---
+    # --- TABEL DATA DAPUR SELANG-SELING (ZEBRA STRIPING) ---
+    st.markdown("##### 📋 **Daftar Dapur SPPG Operasional**")
+    
     if not df_dapur.empty:
-        cols = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
+        # Header Tabel
+        h_cols = st.columns([0.8, 1.8, 2.5, 1.0, 1.1, 1.1, 0.9, 0.5, 0.5])
         headers = ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGITUDE", "MAPS", "EDIT", "HAPUS"]
         
-        for col, h in zip(cols, headers):
+        for col, h in zip(h_cols, headers):
             col.markdown(f"**{h}**")
-        st.markdown("---")
+        st.markdown("<hr style='margin-top:0; margin-bottom:10px;'>", unsafe_allow_html=True)
         
+        # Iterasi Baris Data dengan Warna Selang-Seling
         for i, r in df_dapur.iterrows():
-            c_kode, c_nama, c_alamat, c_pic, c_lat, c_lon, c_map, c_edit, c_del = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
+            # Tentukan warna latar belakang berdasarkan baris genap/ganjil
+            bg_color = "#f8fafc" if i % 2 == 0 else "#ffffff"
             
-            lat_val = r.get("LATITUDE", None)
-            lon_val = r.get("LONGITUDE", None)
-            
-            c_kode.write(r.get("KODE", "-"))
-            c_nama.write(r.get("NAMA DAPUR", "-"))
-            c_alamat.write(r.get("ALAMAT", "-"))
-            c_pic.write(r.get("PIC", "-"))
-            c_lat.write(f"{lat_val:.5f}" if pd.notna(lat_val) else "-")
-            c_lon.write(f"{lon_val:.5f}" if pd.notna(lon_val) else "-")
-            
-            if pd.notna(lat_val) and pd.notna(lon_val):
-                gmap_url = f"https://www.google.com/maps/search/?api=1&query={lat_val},{lon_val}"
-                c_map.markdown(f"[📍 Buka]({gmap_url})")
-            else:
-                c_map.write("-")
-            
-            if c_edit.button("✏️", key=f"edit_{i}"):
-                open_edit_dapur_dialog(i)
+            # Buat kontainer bergaya kartu tipis untuk setiap baris
+            with st.container():
+                st.markdown(
+                    f"""
+                    <div style="background-color: {bg_color}; padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 6px;">
+                    """,
+                    unsafe_allow_html=True
+                )
                 
-            if c_del.button("🗑️", key=f"del_{i}"):
-                open_delete_dapur_dialog(i)
+                c_kode, c_nama, c_alamat, c_pic, c_lat, c_lon, c_map, c_edit, c_del = st.columns([0.8, 1.8, 2.5, 1.0, 1.1, 1.1, 0.9, 0.5, 0.5])
+                
+                lat_val = r.get("LATITUDE", None)
+                lon_val = r.get("LONGITUDE", None)
+                
+                c_kode.write(f"**{r.get('KODE', '-')}**")
+                c_nama.write(r.get("NAMA DAPUR", "-"))
+                c_alamat.write(r.get("ALAMAT", "-"))
+                c_pic.write(r.get("PIC", "-"))
+                c_lat.write(f"{lat_val:.5f}" if pd.notna(lat_val) else "-")
+                c_lon.write(f"{lon_val:.5f}" if pd.notna(lon_val) else "-")
+                
+                # Direct Link Google Maps
+                if pd.notna(lat_val) and pd.notna(lon_val):
+                    gmap_url = f"https://www.google.com/maps/search/?api=1&query={lat_val},{lon_val}"
+                    c_map.markdown(f"[📍 Buka]({gmap_url})")
+                else:
+                    c_map.write("-")
+                
+                # Tombol Aksi
+                if c_edit.button("✏️", key=f"edit_{i}"):
+                    open_edit_dapur_dialog(i)
+                    
+                if c_del.button("🗑️", key=f"del_{i}"):
+                    open_delete_dapur_dialog(i)
+                
+                st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.info("Belum ada data dapur. Klik 'Tambah Dapur Baru' untuk menambahkan.")
 
 # ---------------------------------------------------------
-# MODUL 1: DASHBOARD
+# MODUL LAINNYA
 # ---------------------------------------------------------
 elif menu == "📊 Dashboard & HET":
     st.subheader("📊 Dashboard Utama & Pemantauan HET")
@@ -291,9 +324,6 @@ elif menu == "📊 Dashboard & HET":
     m3.metric("Kategori Barang", "6 Kategori", delta="Lengkap")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
 
-# ---------------------------------------------------------
-# MODUL LAINNYA (PLACEHOLDER)
-# ---------------------------------------------------------
 else:
     st.subheader(f"Modul {menu}")
     st.info("Modul sedang aktif dan dapat diakses dari sidebar sebelah kiri.")
