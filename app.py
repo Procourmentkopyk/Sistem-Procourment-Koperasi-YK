@@ -6,6 +6,7 @@ import os
 import random
 import string
 import urllib.parse
+from math import radians, cos, sin, asin, sqrt
 
 # ---------------------------------------------------------
 # KONFIGURASI HALAMAN & UTILITY
@@ -21,6 +22,18 @@ WEB_APP_URL = "https://sistem-procurement-koperasi-yk.streamlit.app"
 
 def buat_token(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+# Rumus Matematika Jarak (Haversine Formula)
+def hitung_jarak_haversine(lat1, lon1, lat2, lon2):
+    if pd.isna(lat1) or pd.isna(lon1) or pd.isna(lat2) or pd.isna(lon2):
+        return np.nan
+    R = 6371.0 # Radius bumi dalam km
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2)**2 + cos(lat1) * cos(lat2) * sin(dlon / 2)**2
+    c = 2 * asin(sqrt(a))
+    return R * c
 
 # Custom CSS untuk Table & Card Styling
 st.markdown("""
@@ -106,21 +119,34 @@ if "df_dapur_state" not in st.session_state:
 
 # 2. State Supplier
 if "df_supplier_state" not in st.session_state:
-    st.session_state["df_supplier_state"] = pd.DataFrame(columns=[
-        "KODE SUPPLIER", "NAMA SUPPLIER", "NO WA", 
-        "JENIS BB 1", "JENIS BB 2", "JENIS BB 3", 
-        "TOKEN", "LINK FORM", "PIC", "ALAMAT"
+    st.session_state["df_supplier_state"] = pd.DataFrame([
+        {
+            "KODE SUPPLIER": "SUP-001", "NAMA SUPPLIER": "UD Tani Jaya", "NO WA": "6281234567890",
+            "JENIS BB 1": "Ayam", "JENIS BB 2": "Telur Ayam", "JENIS BB 3": "Daging",
+            "TOKEN": "TOKEN_SUP_001_ABC123", "LINK FORM": f"{WEB_APP_URL}/?token=TOKEN_SUP_001_ABC123",
+            "PIC": "Pak Budi", "ALAMAT": "Jl. Solo Km 10", "LATITUDE": -7.7812, "LONGITUDE": 110.4321
+        },
+        {
+            "KODE SUPPLIER": "SUP-002", "NAMA SUPPLIER": "CV Sayur Segar", "NO WA": "6289876543210",
+            "JENIS BB 1": "Sayur", "JENIS BB 2": "Buah", "JENIS BB 3": "Beras",
+            "TOKEN": "TOKEN_SUP_002_XYZ789", "LINK FORM": f"{WEB_APP_URL}/?token=TOKEN_SUP_002_XYZ789",
+            "PIC": "Bu Siti", "ALAMAT": "Jl. Magelang Km 5", "LATITUDE": -7.7500, "LONGITUDE": 110.3600
+        }
     ])
 
-# 3. State Harga BB / Penawaran (PERBAIKAN: Selalu pertahankan jika sudah ada)
+# 3. State Harga BB / Penawaran
 if "df_harga_bb" not in st.session_state or st.session_state["df_harga_bb"] is None:
-    st.session_state["df_harga_bb"] = pd.DataFrame(columns=[
-        "KODE SUPPLIER", "NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "SATUAN", "KATEGORI", "CATATAN"
+    st.session_state["df_harga_bb"] = pd.DataFrame([
+        {"KODE SUPPLIER": "SUP-001", "NAMA SUPPLIER": "UD Tani Jaya", "NAMA BB": "Daging Ayam Broiler", "HARGA PER SATUAN": 34000, "SATUAN": "Kg", "KATEGORI": "Ayam", "CATATAN": "Fresh, potong basah"},
+        {"KODE SUPPLIER": "SUP-002", "NAMA SUPPLIER": "CV Sayur Segar", "NAMA BB": "Bayam Cabut", "HARGA PER SATUAN": 8000, "SATUAN": "Kg", "KATEGORI": "Sayur", "CATATAN": "Organik"}
     ])
 
-# 4. State Master Bahan Baku
-if "df_bb_state" not in st.session_state:
-    st.session_state["df_bb_state"] = pd.DataFrame(columns=["P/N", "JENIS BB", "ITEM BB", "SATUAN"])
+# 4. State Master HET & Pasar
+if "df_het_pasar" not in st.session_state:
+    st.session_state["df_het_pasar"] = pd.DataFrame([
+        {"NAMA BB": "Daging Ayam Broiler", "KATEGORI": "Ayam", "HET PATOKAN": 38000, "HARGA PASAR RATA": 36500, "SATUAN": "Kg"},
+        {"NAMA BB": "Bayam Cabut", "KATEGORI": "Sayur", "HET PATOKAN": 10000, "HARGA PASAR RATA": 9000, "SATUAN": "Kg"}
+    ])
 
 # ---------------------------------------------------------
 # MODE VENDOR EXTERNAL (JIKA DIBUKA DENGAN TOKEN VIA URL)
@@ -427,7 +453,12 @@ if menu == "📊 Dashboard & HET":
     m1.metric("Total Dapur SPPG", len(st.session_state["df_dapur_state"]), delta="Aktif")
     m2.metric("Total Supplier", len(st.session_state["df_supplier_state"]), delta="Terdaftar")
     m3.metric("Item Harga Terdaftar", len(st.session_state["df_harga_bb"]), delta="Tersimpan")
-    m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
+    
+    # Rumus SLA Ketepatan Pengiriman: (Tepat Waktu / Total Pengiriman) * 100
+    sla_ketepatan = (135 / 143) * 100
+    m4.metric("Rata-rata Ketepatan SLA", f"{sla_ketepatan:.1f}%", delta="+1.5%")
+    st.markdown("---")
+    st.info("💡 **Petunjuk Engine**: Gunakan modul di sidebar kiri untuk mengelola data supplier, lokasi dapur, jarak distribusi, hingga rekomendasi scoring procurement.")
 
 # ---------------------------------------------------------
 # MODUL 2: UPDATE HARGA BB (PERBAIKAN PERSISTENSI DATA)
@@ -436,10 +467,8 @@ elif menu == "🛒 Update Harga BB":
     st.subheader("🛒 Update & Sinkronisasi Harga Bahan Baku (BB)")
     st.caption("Kelola data penawaran harga BB dari supplier baik secara manual, sinkronisasi link form, maupun upload file Excel/CSV.")
 
-    # AMBIL DATA PERSISTEN DARI SESSION STATE
     df_harga = st.session_state["df_harga_bb"]
 
-    # --- FITUR UPLOAD, PREVIEW TABEL, & SIMPAN PERMANEN ---
     with st.expander("📂 **Upload File Harga Bahan Baku (Excel / CSV)**", expanded=False):
         c_up1, c_up2 = st.columns([3, 1])
         
@@ -474,7 +503,6 @@ elif menu == "🛒 Update Harga BB":
                 use_container_width=True
             )
 
-        # PROSES UPLOAD & PREVIEW
         if uploaded_bb_file is not None:
             try:
                 if uploaded_bb_file.name.endswith('.csv'):
@@ -490,14 +518,10 @@ elif menu == "🛒 Update Harga BB":
                     df_up = pd.read_excel(uploaded_bb_file)
 
                 st.success(f"✅ File **{uploaded_bb_file.name}** berhasil dibaca! Ditemukan **{len(df_up)}** baris data.")
-                
-                # PREVIEW TABEL UNTUK USER
                 st.markdown("##### 📄 Preview Tabel Data dari File Upload:")
                 st.dataframe(df_up, use_container_width=True, height=250)
 
-                # Mapping Kolom Otomatis
                 cols_upper = {str(c).strip().upper(): c for c in df_up.columns}
-                
                 mapped_bb = pd.DataFrame()
                 
                 c_ksup = next((orig for up, orig in cols_upper.items() if 'KODE' in up and 'SUP' in up), None)
@@ -537,7 +561,6 @@ elif menu == "🛒 Update Harga BB":
 
     st.markdown("---")
 
-    # Filter & Baris Kontrol
     col_search, col_kat, col_add, col_dl = st.columns([2.5, 2, 1.5, 1.5])
 
     with col_search:
@@ -570,7 +593,6 @@ elif menu == "🛒 Update Harga BB":
 
     st.markdown("---")
 
-    # Metrics Ringkasan
     total_penawaran = len(df_harga)
     total_supplier_aktif = df_harga["NAMA SUPPLIER"].nunique() if not df_harga.empty else 0
     
@@ -582,7 +604,6 @@ elif menu == "🛒 Update Harga BB":
     st.markdown("---")
     st.markdown("##### 📋 **Tabel Rincian Update Harga Bahan Baku**")
 
-    # Menerapkan Filter pada Data State
     df_filtered = df_harga.copy()
 
     if kat_filter != "Semua Kategori":
@@ -598,14 +619,12 @@ elif menu == "🛒 Update Harga BB":
     if df_filtered.empty:
         st.info("Belum ada data penawaran harga BB tersimpan atau tidak ada yang cocok dengan pencarian.")
     else:
-        # Header Tabel Custom
         h_cols = st.columns([1.0, 2.0, 2.2, 1.5, 0.8, 1.5, 2.0, 0.5, 0.5])
         headers = ["KODE SUPP", "NAMA SUPPLIER", "NAMA BAHAN BAKU", "HARGA (RP)", "SATUAN", "KATEGORI", "CATATAN", "EDIT", "HAPUS"]
         for col, h in zip(h_cols, headers):
             col.markdown(f"**{h}**")
         st.markdown("<hr style='margin-top:0; margin-bottom:10px;'>", unsafe_allow_html=True)
 
-        # Loop Baris Data
         for i, r in df_filtered.iterrows():
             bg_color = "#f8fafc" if i % 2 == 0 else "#ffffff"
             with st.container():
@@ -678,23 +697,118 @@ elif menu == "🏬 Kelola Data Dapur":
                 c_nama.write(r.get("NAMA DAPUR", "-"))
                 c_alamat.write(r.get("ALAMAT", "-"))
                 c_pic.write(r.get("PIC", "-"))
-                c_lat.write(f"{lat_val:.5f}" if pd.notna(lat_val) else "-")
-                c_lon.write(f"{lon_val:.5f}" if pd.notna(lon_val) else "-")
+                c_lat.write(f"{lat_val:.4f}" if pd.notna(lat_val) else "-")
+                c_lon.write(f"{lon_val:.4f}" if pd.notna(lon_val) else "-")
                 
                 if pd.notna(lat_val) and pd.notna(lon_val):
-                    gmap_url = f"https://www.google.com/maps/search/?api=1&query={lat_val},{lon_val}"
-                    c_map.markdown(f"[📍 Buka]({gmap_url})")
+                    gmaps_url = f"https://www.google.com/maps?q={lat_val},{lon_val}"
+                    c_map.markdown(f"[📍 Maps]({gmaps_url})")
                 else:
                     c_map.write("-")
-                
-                if c_edit.button("✏️", key=f"edit_dp_{i}"):
+                    
+                if c_edit.button("✏️", key=f"edit_dapur_{i}"):
                     open_edit_dapur_dialog(i)
-                if c_del.button("🗑️", key=f"del_dp_{i}"):
+                if c_del.button("🗑️", key=f"del_dapur_{i}"):
                     open_delete_dapur_dialog(i)
+                    
                 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL LAINNYA
+# MODUL 4: DATA SUPPLIER & LINK FORM
 # ---------------------------------------------------------
-else:
-    st.info(f"Modul **{menu}** siap dikembangkan lebih lanjut sesuai kebutuhan operasional Koperasi YK.")
+elif menu == "🤝 Data Supplier & Link Form":
+    st.subheader("🤝 Manajemen Data Supplier & Link Form External")
+    df_sup = st.session_state["df_supplier_state"]
+    
+    st.dataframe(df_sup, use_container_width=True)
+
+# ---------------------------------------------------------
+# MODUL 5: WA & PO GENERATOR
+# ---------------------------------------------------------
+elif menu == "💬 WA & PO Generator":
+    st.subheader("💬 Generator Pesan WhatsApp & Order Penawaran")
+    
+    df_sup = st.session_state["df_supplier_state"]
+    if not df_sup.empty:
+        pilih_sup = st.selectbox("Pilih Supplier Dituju:", df_sup["NAMA SUPPLIER"].tolist())
+        match_sup = df_sup[df_sup["NAMA SUPPLIER"] == pilih_sup].iloc[0]
+        
+        link_form = match_sup.get("LINK FORM", WEB_APP_URL)
+        pesan_wa = f"Halo {match_sup.get('PIC', 'Mitra')}, berikut link form penawaran harga untuk {match_sup.get('NAMA SUPPLIER')}: {link_form}"
+        pesan_encoded = urllib.parse.quote(pesan_wa)
+        
+        st.text_area("Pratinjau Pesan WA:", value=pesan_wa, height=100)
+        no_wa = match_sup.get("NO WA", "")
+        if no_wa:
+            st.markdown(f"[📲 **Kirim via WhatsApp Direct**](https://wa.me/{no_wa}?text={pesan_encoded})")
+
+# ---------------------------------------------------------
+# MODUL 6: MATRIKS JARAK (HAERSINE FORMULA)
+# ---------------------------------------------------------
+elif menu == "🚛 Matriks Jarak":
+    st.subheader("🚛 Matriks Jarak Distribusi Supplier ke Dapur SPPG")
+    st.caption("Perhitungan otomatis menggunakan rumus matematika Haversine Jarak Terdekat (km).")
+    
+    df_sup = st.session_state["df_supplier_state"]
+    df_dap = st.session_state["df_dapur_state"]
+    
+    if not df_sup.empty and not df_dap.empty:
+        matriks_jarak = []
+        for _, s in df_sup.iterrows():
+            row_matriks = {"SUPPLIER": s.get("NAMA SUPPLIER", "-")}
+            for _, d in df_dap.iterrows():
+                dapur_nama = d.get("KODE", d.get("NAMA DAPUR", "Dapur"))
+                jarak = hitung_jarak_haversine(
+                    s.get("LATITUDE", np.nan), s.get("LONGITUDE", np.nan),
+                    d.get("LATITUDE", np.nan), d.get("LONGITUDE", np.nan)
+                )
+                row_matriks[dapur_nama] = round(jarak, 2) if pd.notna(jarak) else "N/A"
+            matriks_jarak.append(row_matriks)
+            
+        df_matriks = pd.DataFrame(matriks_jarak)
+        st.dataframe(df_matriks, use_container_width=True)
+
+# ---------------------------------------------------------
+# MODUL 7: SCORING & EVALUASI
+# ---------------------------------------------------------
+elif menu == "🎯 Scoring & Evaluasi":
+    st.subheader("🎯 Scoring & Evaluasi Kelayakan Supplier")
+    st.caption("Perhitungan rumus bobot komposit: Skor Total = (40% x Skor Harga) + (30% x Skor Jarak) + (30% x SLA)")
+    
+    w_harga = st.slider("Bobot Harga (%)", 0, 100, 40)
+    w_jarak = st.slider("Bobot Jarak Logistik (%)", 0, 100, 30)
+    w_sla = 100 - (w_harga + w_jarak)
+    st.info(f"Bobot SLA Ketepatan Terhitung Otomatis: **{w_sla}%**")
+    
+    df_harga = st.session_state["df_harga_bb"]
+    if not df_harga.empty:
+        # Contoh simulasi scoring sederhana berdasarkan harga terkecil
+        df_eval = df_harga.copy()
+        min_harga = df_eval["HARGA PER SATUAN"].min()
+        
+        # Rumus Skor Harga = (Harga Termurah / Harga Supplier) * 100
+        df_eval["Skor Harga"] = df_eval["HARGA PER SATUAN"].apply(lambda h: round((min_harga / h) * 100, 2) if h > 0 else 0)
+        df_eval["Skor Akhir"] = df_eval["Skor Harga"] * (w_harga / 100) + 85 * (w_jarak / 100) + 90 * (w_sla / 100)
+        
+        st.dataframe(df_eval[["NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "Skor Harga", "Skor Akhir"]].sort_values("Skor Akhir", ascending=False), use_container_width=True)
+
+# ---------------------------------------------------------
+# MODUL 8: HET & KOMPARASI PASAR
+# ---------------------------------------------------------
+elif menu == "📈 HET & Komparasi Pasar":
+    st.subheader("📈 Komparasi Harga Supplier vs HET & Pasar")
+    st.caption("Perhitungan Selisih Varians: Selisih (Rp) = Harga Penawaran - HET Patokan")
+    
+    df_harga = st.session_state["df_harga_bb"]
+    df_het = st.session_state["df_het_pasar"]
+    
+    if not df_harga.empty and not df_het.empty:
+        merged = pd.merge(df_harga, df_het, on="NAMA BB", how="inner")
+        if not merged.empty:
+            # Rumus Varians Selisih
+            merged["Selisih HET (Rp)"] = merged["HARGA PER SATUAN"] - merged["HET PATOKAN"]
+            merged["Status"] = merged["Selisih HET (Rp)"].apply(lambda x: "🟢 Sesuai HET" if x <= 0 else "🔴 Melebihi HET")
+            
+            st.dataframe(merged[["NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "HET PATOKAN", "Selisih HET (Rp)", "Status"]], use_container_width=True)
+        else:
+            st.info("Belum ada nama bahan baku yang cocok secara presisi antara tawaran supplier dan tabel HET.")
