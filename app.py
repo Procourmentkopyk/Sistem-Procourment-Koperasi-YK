@@ -17,7 +17,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-WEB_APP_URL = "https://sistem-procurement-koperasi-yk.streamlit.app"
+WEB_APP_URL = "https://sistem-procurment-koperasi-yk-upcmsvru9itmpmgsoakzfh.streamlit.app"
 
 def buat_token(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
