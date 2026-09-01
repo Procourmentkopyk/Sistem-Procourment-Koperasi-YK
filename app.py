@@ -1,8 +1,9 @@
 import streamlit as st
 import pandas as pd
+import numpy as np
 import os
 
-# Konfigurasi Halaman dengan Sidebar Tersembunyi Otomatis (Clean Mode)
+# Konfigurasi Halaman Clean Mode
 st.set_page_config(
     page_title="SPPG Procurement Engine | Koperasi YK",
     page_icon="⚡",
@@ -10,7 +11,7 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
-# Custom CSS untuk Desain Card & Pop-Up Styling
+# Custom CSS
 st.markdown("""
 <style>
     .header-card {
@@ -62,15 +63,16 @@ def load_data():
 
 data_excel, file_status = load_data()
 
-# Initialize Session State
+# Inisialisasi Session State Modul
 if "current_modul" not in st.session_state:
     st.session_state["current_modul"] = "2. Kelola Data Dapur SPPG"
 
-# Inisialisasi Dataframe Dapur di Session State & Pembersihan Header
+# Inisialisasi & Cleaning Data Dapur (Latitude/Longitude Tetap Ada)
 if "df_dapur_state" not in st.session_state:
     if data_excel and isinstance(data_excel, dict) and "Data Dapur" in data_excel:
         raw_df = data_excel["Data Dapur"].copy()
-        # Cari header NAMA DAPUR jika terbungkus Unnamed
+        
+        # Deteksi Header jika terbungkus Unnamed
         if "Unnamed" in str(raw_df.columns[0]):
             header_idx = raw_df[raw_df.apply(lambda row: row.astype(str).str.contains('NAMA DAPUR').any(), axis=1)].index
             if not header_idx.empty:
@@ -79,16 +81,30 @@ if "df_dapur_state" not in st.session_state:
                 raw_df = raw_df.iloc[idx+1:].reset_index(drop=True)
                 raw_df = raw_df.dropna(how="all", subset=["NAMA DAPUR"])
         
-        # Ambil kolom relevan saja
-        valid_cols = [c for c in raw_df.columns if pd.notna(c) and not str(c).startswith("Unnamed")]
-        st.session_state["df_dapur_state"] = raw_df[valid_cols].reset_index(drop=True)
+        # Bersihkan nama kolom
+        raw_df.columns = [str(c).strip().upper() for c in raw_df.columns]
+        
+        # Kolom yang dipertahankan
+        cols_to_keep = [c for c in ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGTITUDE", "LONGITUDE", "KOTA/KABUPATEN"] if c in raw_df.columns]
+        df_clean = raw_df[cols_to_keep].copy()
+        
+        # Standardisasi Nama Kolom Longitude
+        if "LONGTITUDE" in df_clean.columns:
+            df_clean = df_clean.rename(columns={"LONGTITUDE": "LONGITUDE"})
+            
+        # Konversi Lat/Lon ke Angka/Float
+        df_clean["LATITUDE"] = pd.to_numeric(df_clean["LATITUDE"], errors="coerce")
+        df_clean["LONGITUDE"] = pd.to_numeric(df_clean["LONGITUDE"], errors="coerce")
+        
+        st.session_state["df_dapur_state"] = df_clean.reset_index(drop=True)
     else:
-        # Fallback dummy data jika excel tidak terbaca
         st.session_state["df_dapur_state"] = pd.DataFrame({
             "KODE": ["PAKEM", "NGPLK", "SLMN4"],
             "NAMA DAPUR": ["PAKEM (Hargobinangun)", "NGEMPLAK (Umbulmartani 1)", "SLEMAN 4 (Triharjo)"],
             "ALAMAT": ["Jl. Kaliurang Km 22", "Jl. Kaliurang Km 15.5", "Jl. Letkol Subadri"],
             "PIC": ["SHINTA", "SHINTA", "CAHYO"],
+            "LATITUDE": [-7.618382, -7.675789, -7.700475],
+            "LONGITUDE": [110.426078, 110.417100, 110.342646],
             "KOTA/KABUPATEN": ["SLEMAN", "SLEMAN", "SLEMAN"]
         })
 
@@ -102,9 +118,11 @@ def open_dapur_dialog():
             kode = st.text_input("Kode Dapur (Contoh: BNTL1)")
             nama = st.text_input("Nama Dapur SPPG")
             pic = st.text_input("Nama PIC / Penanggung Jawab")
-        with c2:
-            alamat = st.text_area("Alamat Lengkap Dapur", height=100)
             kota = st.selectbox("Kota / Kabupaten", ["BANTUL", "SLEMAN", "GUNUNGKIDUL", "KULON PROGO", "YOGYAKARTA"])
+        with c2:
+            alamat = st.text_area("Alamat Lengkap Dapur", height=80)
+            lat = st.number_input("Latitude", value=-7.7956, format="%.6f")
+            lon = st.number_input("Longitude", value=110.3695, format="%.6f")
             
         if st.form_submit_button("✨ Simpan Dapur Baru", use_container_width=True):
             new_row = pd.DataFrame([{
@@ -112,6 +130,8 @@ def open_dapur_dialog():
                 "NAMA DAPUR": nama,
                 "ALAMAT": alamat,
                 "PIC": pic,
+                "LATITUDE": lat,
+                "LONGITUDE": lon,
                 "KOTA/KABUPATEN": kota
             }])
             st.session_state["df_dapur_state"] = pd.concat([st.session_state["df_dapur_state"], new_row], ignore_index=True)
@@ -131,20 +151,23 @@ def open_edit_dapur_dialog(index):
             kode = st.text_input("Kode Dapur", value=str(row.get("KODE", "")))
             nama = st.text_input("Nama Dapur SPPG", value=str(row.get("NAMA DAPUR", "")))
             pic = st.text_input("Nama PIC", value=str(row.get("PIC", "")))
-        with c2:
-            alamat = st.text_area("Alamat Lengkap Dapur", value=str(row.get("ALAMAT", "")), height=100)
             
-            # Pilihan Kota
             list_kota = ["BANTUL", "SLEMAN", "GUNUNGKIDUL", "KULON PROGO", "YOGYAKARTA"]
             curr_kota = str(row.get("KOTA/KABUPATEN", "")).upper()
             idx_kota = list_kota.index(curr_kota) if curr_kota in list_kota else 0
             kota = st.selectbox("Kota / Kabupaten", list_kota, index=idx_kota)
+        with c2:
+            alamat = st.text_area("Alamat Lengkap Dapur", value=str(row.get("ALAMAT", "")), height=80)
+            lat = st.number_input("Latitude", value=float(row.get("LATITUDE", -7.7956) if pd.notna(row.get("LATITUDE")) else -7.7956), format="%.6f")
+            lon = st.number_input("Longitude", value=float(row.get("LONGITUDE", 110.3695) if pd.notna(row.get("LONGITUDE")) else 110.3695), format="%.6f")
             
         if st.form_submit_button("💾 Update Perubahan Data", use_container_width=True):
             st.session_state["df_dapur_state"].at[index, "KODE"] = kode
             st.session_state["df_dapur_state"].at[index, "NAMA DAPUR"] = nama
             st.session_state["df_dapur_state"].at[index, "ALAMAT"] = alamat
             st.session_state["df_dapur_state"].at[index, "PIC"] = pic
+            st.session_state["df_dapur_state"].at[index, "LATITUDE"] = lat
+            st.session_state["df_dapur_state"].at[index, "LONGITUDE"] = lon
             st.session_state["df_dapur_state"].at[index, "KOTA/KABUPATEN"] = kota
             st.success("Data dapur berhasil diperbarui!")
             st.rerun()
@@ -156,8 +179,6 @@ def open_delete_dapur_dialog(index):
     nama_dapur = df.iloc[index].get("NAMA DAPUR", "Dapur ini")
     
     st.warning(f"Apakah Anda yakin ingin menghapus data **{nama_dapur}**?")
-    st.caption("Tindakan ini tidak dapat dibatalkan.")
-    
     col1, col2 = st.columns(2)
     with col1:
         if st.button("❌ Batal", use_container_width=True):
@@ -214,7 +235,9 @@ menu = st.session_state["current_modul"]
 # MODUL 2: KELOLA DATA DAPUR SPPG
 # ---------------------------------------------------------
 if menu == "2. Kelola Data Dapur SPPG":
-    st.subheader("🏬 Manajemen Data Dapur SPPG")
+    st.subheader("🏬 Manajemen Data Dapur SPPG & Peta Sebaran")
+    
+    df_dapur = st.session_state["df_dapur_state"]
     
     col_tambah, _ = st.columns([1, 3])
     with col_tambah:
@@ -223,32 +246,58 @@ if menu == "2. Kelola Data Dapur SPPG":
             
     st.markdown("<br>", unsafe_allow_html=True)
     
-    df_dapur = st.session_state["df_dapur_state"]
+    # --- PETA SEBARAN DAPUR SPPG ---
+    st.markdown("##### 🗺️ **Peta Sebaran Lokasi Dapur SPPG**")
+    map_data = df_dapur.dropna(subset=["LATITUDE", "LONGITUDE"]).copy()
     
+    if not map_data.empty:
+        # Standardisasi kolom lat/lon khusus untuk st.map
+        map_df = pd.DataFrame({
+            "lat": map_data["LATITUDE"].astype(float),
+            "lon": map_data["LONGITUDE"].astype(float)
+        })
+        st.map(map_df, zoom=10, use_container_width=True)
+    else:
+        st.warning("Data Koordinat (Latitude/Longitude) belum terisi dengan benar.")
+        
+    st.markdown("---")
+    
+    # --- TABEL DATA DAPUR DENGAN KOORDINAT & LINK GOOGLE MAPS ---
     if not df_dapur.empty:
-        # Header Kolom Tabel khusus dengan Tombol Aksi di Ujung Kanan
-        cols = st.columns([1.2, 2.5, 3.5, 1.5, 1.5, 0.6, 0.6])
-        headers = ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "KOTA/KABUPATEN", "EDIT", "HAPUS"]
+        # Header Kolom
+        cols = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
+        headers = ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGITUDE", "MAPS", "EDIT", "HAPUS"]
         
         for col, h in zip(cols, headers):
             col.markdown(f"**{h}**")
         st.markdown("---")
         
-        # Baris Data dengan Tombol Pensil (Edit) & Sampah (Hapus)
+        # Baris Data
         for i, r in df_dapur.iterrows():
-            c_kode, c_nama, c_alamat, c_pic, c_kota, c_edit, c_del = st.columns([1.2, 2.5, 3.5, 1.5, 1.5, 0.6, 0.6])
+            c_kode, c_nama, c_alamat, c_pic, c_lat, c_lon, c_map, c_edit, c_del = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
+            
+            lat_val = r.get("LATITUDE", None)
+            lon_val = r.get("LONGITUDE", None)
             
             c_kode.write(r.get("KODE", "-"))
             c_nama.write(r.get("NAMA DAPUR", "-"))
             c_alamat.write(r.get("ALAMAT", "-"))
             c_pic.write(r.get("PIC", "-"))
-            c_kota.write(r.get("KOTA/KABUPATEN", "-"))
+            c_lat.write(f"{lat_val:.5f}" if pd.notna(lat_val) else "-")
+            c_lon.write(f"{lon_val:.5f}" if pd.notna(lon_val) else "-")
             
-            # Tombol Pensil (Edit)
+            # Direct Link Google Maps
+            if pd.notna(lat_val) and pd.notna(lon_val):
+                gmap_url = f"https://www.google.com/maps/search/?api=1&query={lat_val},{lon_val}"
+                c_map.markdown(f"[📍 Buka]({gmap_url})")
+            else:
+                c_map.write("-")
+            
+            # Tombol Edit
             if c_edit.button("✏️", key=f"edit_{i}"):
                 open_edit_dapur_dialog(i)
                 
-            # Tombol Sampah (Hapus)
+            # Tombol Hapus
             if c_del.button("🗑️", key=f"del_{i}"):
                 open_delete_dapur_dialog(i)
     else:
