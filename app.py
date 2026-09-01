@@ -567,7 +567,7 @@ elif menu == "🤝 Data Supplier & Link Form":
         st.info("Belum ada data supplier. Silakan upload file Excel di atas.")
 
 # ---------------------------------------------------------
-# MODUL 4: WA & PO GENERATOR
+# MODUL 4: WA & PO GENERATOR (TEMPLATE PESAN DENGAN BHS JAWA / BARLIAN)
 # ---------------------------------------------------------
 elif menu == "💬 WA & PO Generator":
     st.subheader("💬 WA Message & PO Link Generator")
@@ -625,7 +625,7 @@ elif menu == "💬 WA & PO Generator":
                 st.success(f"Kategori untuk {row_sup['NAMA SUPPLIER']} berhasil diperbarui!")
                 st.rerun()
 
-        # 3. GENERATE LINK & PESAN WA DENGAN FITUR EDIT MANUAL
+        # 3. GENERATE LINK & PESAN WA DENGAN TEMPLATE BARU
         st.markdown("---")
         st.markdown("##### 2️⃣ **Preview & Edit Pesan WhatsApp**")
 
@@ -637,23 +637,26 @@ elif menu == "💬 WA & PO Generator":
 
         no_wa = str(row_sup.get("NO WA", "")).replace("+", "").replace(" ", "").replace("-", "").split(".")[0]
         nama_supplier = row_sup.get("NAMA SUPPLIER", "Bapak/Ibu Vendor")
-        kategori_txt = ", ".join(selected_kategori) if selected_kategori else "Bahan Baku"
 
-        # Template default
+        # Template Pesan Default Terbaru
         default_pesan = (
-            f"Halo *{nama_supplier}*,\n\n"
-            f"Kami dari tim Procurement Koperasi YK/SPPG. "
-            f"Mohon untuk mengisi update harga penawaran harian/mingguan untuk kategori *[{kategori_txt}]* "
-            f"melalui link form resmi berikut ini:\n\n"
+            f"Sugeng Enjing Bapak/Ibu *{nama_supplier}*\n\n"
+            f"Sehubungan dengan proses pembuatan PO dapur yang di majukan di hari kamis, bersama ini Barlian kirimkan pengisian link penawaran harga untuk pengadaan barang koperasi BUM ASSA periode 31 Ags - 11 Sept 2026\n\n"
             f"🔗 {link_form_khusus}\n\n"
-            f"Terima kasih atas kerja samanya."
+            f"Untuk cara pengisian :\n"
+            f"1. klik link diatas (bisa menggunakan hp atau laptop dg koneksi internet)\n"
+            f"2. isi kolom harga hanya dengan angka (tanpa tanda baca) sesuai item bahan\n"
+            f"3. klik simpan penawaran (akan muncul notif berhasil menyimpan data)\n"
+            f"4. silahkan konfirmasi dengan chat wa \"update oke\" apabila sudah mengisi form penawaran harga\n\n"
+            f"mengingat penggunaan update harga penawaran tersebut akan digunakan untuk pembuatan PO supplier di hari rabu-kamis, barlian mohon supaya dapat di isi maksimal hari ini jam 18:00 malam\n\n"
+            f"Matursuwun 🙏"
         )
 
         # Text area dengan KEY agar editan user tersimpan di session_state
         pesan_edited = st.text_area(
             "Silakan edit draft pesan di bawah ini jika diperlukan:", 
             value=default_pesan, 
-            height=180,
+            height=320,
             key=f"txt_wa_{idx_sup}"
         )
 
@@ -671,4 +674,4 @@ elif menu == "💬 WA & PO Generator":
             )
             
         with col_wa2:
-            st.info(f"💡 Apabila kamu mengubah isi teks di atas, tombol WhatsApp akan otomatis mengirimkan teks hasil editan terbaru kamu.")
+            st.info(f"💡 Apabila kamu mengubah isi teks atau tanggal di atas, tombol WhatsApp akan otomatis mengirimkan teks hasil editan terbaru kamu.")
