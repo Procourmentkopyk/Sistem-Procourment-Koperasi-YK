@@ -20,7 +20,7 @@ st.markdown("""
 <style>
     .header-card {
         background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
-        padding: 1.5rem;
+        padding: 1.25rem 1.5rem;
         border-radius: 12px;
         color: white;
         margin-bottom: 1.5rem;
@@ -84,7 +84,36 @@ def load_data():
 
 data_excel, file_status = load_data()
 
-# --- 1. SESSION STATE: DATA SUPPLIER & LINK ---
+# =========================================================
+# INISIALISASI SESSION STATE (AGAR DATA TIDAK HILANG)
+# =========================================================
+
+# 1. SESSION STATE: DATA DAPUR
+if "df_dapur_state" not in st.session_state:
+    if data_excel and isinstance(data_excel, dict) and "Data Dapur" in data_excel:
+        raw_df = data_excel["Data Dapur"].copy()
+        if "Unnamed" in str(raw_df.columns[0]):
+            header_idx = raw_df[raw_df.apply(lambda row: row.astype(str).str.contains('NAMA DAPUR').any(), axis=1)].index
+            if not header_idx.empty:
+                idx = header_idx[0]
+                raw_df.columns = raw_df.iloc[idx]
+                raw_df = raw_df.iloc[idx+1:].reset_index(drop=True)
+                raw_df = raw_df.dropna(how="all", subset=["NAMA DAPUR"])
+        raw_df.columns = [str(c).strip().upper() for c in raw_df.columns]
+        cols_to_keep = [c for c in ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGITUDE", "KOTA/KABUPATEN"] if c in raw_df.columns]
+        st.session_state["df_dapur_state"] = raw_df[cols_to_keep].reset_index(drop=True)
+    else:
+        st.session_state["df_dapur_state"] = pd.DataFrame({
+            "KODE": ["PAKEM", "NGPLK", "KLTN"],
+            "NAMA DAPUR": ["PAKEM (Hargobinangun)", "NGEMPLAK (Umbulmartani 1)", "KLATEN UTARA"],
+            "ALAMAT": ["Jl. Kaliurang Km 22", "Jl. Kaliurang Km 15.5", "Jl. Pemuda No. 10"],
+            "PIC": ["SHINTA", "SHINTA", "BUDI"],
+            "LATITUDE": [-7.618382, -7.675789, -7.702100],
+            "LONGITUDE": [110.426078, 110.417100, 110.603200],
+            "KOTA/KABUPATEN": ["SLEMAN", "SLEMAN", "KLATEN"]
+        })
+
+# 2. SESSION STATE: SUPPLIER LINK & TOKEN
 if "df_supplier_state" not in st.session_state:
     if data_excel and isinstance(data_excel, dict) and "Supplier Link" in data_excel:
         df_sup_link = data_excel["Supplier Link"].dropna(how="all").copy()
@@ -103,7 +132,7 @@ if "df_supplier_state" not in st.session_state:
             "JENIS BB 2": ["Bumbu", "Ayam"]
         })
 
-# --- 2. SESSION STATE: HARGA BB MASTER ---
+# 3. SESSION STATE: UPDATE HARGA BB (MASTER)
 if "df_harga_bb" not in st.session_state:
     sheet_name = "UPDATE HARGA BB" if (data_excel and "UPDATE HARGA BB" in data_excel) else "Harga Supplier"
     if data_excel and isinstance(data_excel, dict) and sheet_name in data_excel:
@@ -118,7 +147,7 @@ if "df_harga_bb" not in st.session_state:
             "TARGET HARGA": [12000, 35000, 27000, 16000, 30000]
         })
 
-# --- 3. SESSION STATE: TEMPLATE PESAN WA MINGGUAN ---
+# 4. SESSION STATE: TEMPLATE PESAN WA
 if "wa_template_config" not in st.session_state:
     st.session_state["wa_template_config"] = {
         "header_admin": "Procurement Team Koperasi YK",
@@ -145,6 +174,27 @@ WA Admin: {WA_ADMIN}"""
     }
 
 # --- POP-UP DIALOG MANAGEMENT ---
+@st.dialog("➕ Tambah Dapur Baru")
+def open_add_dapur_dialog():
+    with st.form("form_add_dapur"):
+        kode = st.text_input("Kode Dapur (Contoh: PAKEM)")
+        nama = st.text_input("Nama Dapur")
+        alamat = st.text_area("Alamat Lengkap")
+        pic = st.text_input("Nama PIC Dapur")
+        col_lat, col_lng = st.columns(2)
+        lat = col_lat.number_input("Latitude", value=-7.618382, format="%.6f")
+        lng = col_lng.number_input("Longitude", value=110.426078, format="%.6f")
+        kab = st.text_input("Kota/Kabupaten", value="SLEMAN")
+        
+        if st.form_submit_button("✨ Simpan Dapur Baru", use_container_width=True):
+            new_row = pd.DataFrame([{
+                "KODE": kode, "NAMA DAPUR": nama, "ALAMAT": alamat,
+                "PIC": pic, "LATITUDE": lat, "LONGITUDE": lng, "KOTA/KABUPATEN": kab
+            }])
+            st.session_state["df_dapur_state"] = pd.concat([st.session_state["df_dapur_state"], new_row], ignore_index=True)
+            st.success("Dapur berhasil ditambahkan!")
+            st.rerun()
+
 @st.dialog("➕ Tambah Supplier Baru")
 def open_add_supplier_dialog():
     with st.form("form_add_sup"):
@@ -181,62 +231,130 @@ with st.sidebar:
     st.markdown("---")
     
     modul_options = [
-        "💬 WA Generator & Broadcast",
-        "🤝 Data Supplier & Link",
-        "📊 Master Harga Bahan Baku"
+        "📊 Dashboard & HET",
+        "🏬 Kelola Data Dapur",
+        "🤝 Data Supplier & Link Form",
+        "💬 WA Generator & Request Harga",
+        "🚛 Matriks Jarak & Logistik",
+        "🎯 Scoring & Evaluasi Supplier"
     ]
     
-    menu = st.radio("Pilih Modul:", modul_options, index=0)
+    menu = st.radio("Pilih Modul Menu:", modul_options, index=0)
     st.markdown("---")
-    st.caption(f"Status Excel: 🟢 {file_status}")
+    st.caption(f"Status Data: 🟢 {file_status}")
 
 # --- HEADER UTAMA ---
 st.markdown("""
 <div class="header-card">
     <h2 style="margin:0; color: white;">🏭 Enterprise Procurement System</h2>
-    <p style="margin:0; opacity: 0.8;">Koperasi YK — Sistem Evaluasi Supplier & Request Harga WA</p>
+    <p style="margin:0; opacity: 0.8;">Koperasi YK — Sistem Evaluasi Supplier, Dapur & Automation Request WA</p>
 </div>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL 1: WA GENERATOR & BROADCAST (1-KLIK)
+# MODUL 1: DASHBOARD & HET
 # ---------------------------------------------------------
-if menu == "💬 WA Generator & Broadcast":
-    st.subheader("💬 Broadcast & Request Update Harga via WhatsApp")
+if menu == "📊 Dashboard & HET":
+    st.subheader("📊 Dashboard Utama Procurement & Monitoring HET")
+    
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
+    col_m1.metric("Total Dapur SPPG", len(st.session_state["df_dapur_state"]))
+    col_m2.metric("Total Supplier Aktif", len(st.session_state["df_supplier_state"]))
+    col_m3.metric("Item Bahan Baku Master", len(st.session_state["df_harga_bb"]))
+    col_m4.metric("Status Integrasi WA", "🟢 Siap Digunakan")
+    
+    st.markdown("---")
+    st.markdown("##### 📈 **Ringkasan Master Bahan Baku & HET Target**")
+    st.dataframe(st.session_state["df_harga_bb"], use_container_width=True)
+
+# ---------------------------------------------------------
+# MODUL 2: KELOLA DATA DAPUR
+# ---------------------------------------------------------
+elif menu == "🏬 Kelola Data Dapur":
+    st.subheader("🏬 Manajemen Data Dapur SPPG")
+    
+    c_d1, c_d2 = st.columns([1, 2])
+    with c_d1:
+        if st.button("➕ Tambah Dapur Baru", type="primary", use_container_width=True):
+            open_add_dapur_dialog()
+            
+    st.markdown("---")
+    df_dapur = st.session_state["df_dapur_state"]
+    st.dataframe(df_dapur, use_container_width=True)
+    
+    # Peta Sebaran Dapur
+    if "LATITUDE" in df_dapur.columns and "LONGITUDE" in df_dapur.columns:
+        st.markdown("##### 🗺️ **Peta Lokasi Dapur Operasional**")
+        map_data = df_dapur.dropna(subset=["LATITUDE", "LONGITUDE"])[["LATITUDE", "LONGITUDE"]].rename(
+            columns={"LATITUDE": "lat", "LONGITUDE": "lon"}
+        )
+        st.map(map_data)
+
+# ---------------------------------------------------------
+# MODUL 3: DATA SUPPLIER & LINK FORM
+# ---------------------------------------------------------
+elif menu == "🤝 Data Supplier & Link Form":
+    st.subheader("🤝 Kelola Data Supplier & Link Web App")
+    
+    col1, col2 = st.columns([1, 2])
+    with col1:
+        if st.button("➕ Tambah Supplier Baru", type="primary", use_container_width=True):
+            open_add_supplier_dialog()
+            
+    with col2:
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            st.session_state["df_harga_bb"].to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
+            st.session_state["df_supplier_state"].to_excel(writer, index=False, sheet_name='Supplier Link')
+            st.session_state["df_dapur_state"].to_excel(writer, index=False, sheet_name='Data Dapur')
+        
+        st.download_button(
+            label="📥 Download Seluruh Data System (Excel Multi-Sheet)",
+            data=output.getvalue(),
+            file_name="Master_Data_Procurement_System.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+        
+    st.markdown("---")
+    df_sup = st.session_state["df_supplier_state"]
+    if not df_sup.empty:
+        df_sup["LINK FORM"] = df_sup["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}" if pd.notna(t) else "")
+        st.dataframe(df_sup, use_container_width=True)
+    else:
+        st.info("Belum ada data supplier.")
+
+# ---------------------------------------------------------
+# MODUL 4: WA GENERATOR & REQUEST HARGA (1-KLIK)
+# ---------------------------------------------------------
+elif menu == "💬 WA Generator & Request Harga":
+    st.subheader("💬 Request Update Harga via WhatsApp (1-Klik)")
     
     df_sup = st.session_state["df_supplier_state"]
     df_bb = st.session_state["df_harga_bb"]
     cfg = st.session_state["wa_template_config"]
     
-    # --- PENGATURAN TEMPLATE PESAN MINGGUAN ---
-    with st.expander("⚙️ **Atur Template Pesan & Periode Mingguan (Klik untuk Mengubah)**", expanded=False):
+    # Pengaturan Template Mingguan
+    with st.expander("⚙️ **Pengaturan Master Template Pesan WA Mingguan (Klik untuk Mengubah)**", expanded=False):
         c_tp1, c_tp2 = st.columns(2)
         with c_tp1:
             st.session_state["wa_template_config"]["periode_default"] = st.text_input(
-                "Periode Pengiriman / Minggu Ke:", 
-                value=cfg["periode_default"]
+                "Periode Minggu Pengiriman:", value=cfg["periode_default"]
             )
             st.session_state["wa_template_config"]["header_admin"] = st.text_input(
-                "Nama Pengirim / Divisi:", 
-                value=cfg["header_admin"]
+                "Nama Pengirim / Divisi:", value=cfg["header_admin"]
             )
         with c_tp2:
             st.session_state["wa_template_config"]["wa_admin"] = st.text_input(
-                "Nomor WA Admin:", 
-                value=cfg["wa_admin"]
+                "Nomor WA Admin:", value=cfg["wa_admin"]
             )
-            st.caption("💡 Tag Otomatis yang tersedia: `{NAMA_SUPPLIER}`, `{PERIODE_MINGGU}`, `{LINK_FORM}`, `{DAFTAR_BAHAN}`, `{HEADER_ADMIN}`, `{WA_ADMIN}`")
             
         st.session_state["wa_template_config"]["template_text"] = st.text_area(
-            "Format Pesan Master (Akan diterapkan ke semua supplier):",
-            value=cfg["template_text"],
-            height=200
+            "Format Master Pesan WA:", value=cfg["template_text"], height=180
         )
-        st.success(" Template pesan tersimpan otomatis untuk sesi ini.")
 
     st.markdown("---")
     
-    # --- PILIH SUPPLIER & GENERATE PESAN ---
     col_left, col_right = st.columns([1, 1])
     
     with col_left:
@@ -244,13 +362,12 @@ if menu == "💬 WA Generator & Broadcast":
         
         if not df_sup.empty:
             sup_names = df_sup["NAMA SUPPLIER"].tolist()
-            selected_sup_name = st.selectbox("Pilih Supplier:", sup_names)
+            selected_sup_name = st.selectbox("Pilih Supplier Target:", sup_names)
             
             sup_row = df_sup[df_sup["NAMA SUPPLIER"] == selected_sup_name].iloc[0]
             kode_sup = str(sup_row.get("KODE SUPPLIER", ""))
             token_sup = str(sup_row.get("TOKEN", ""))
             
-            # Format Nomor WA
             target_wa = str(sup_row.get("NO WA", "6285169796974")).replace("-", "").replace(" ", "").replace("+", "")
             if target_wa.startswith("0"):
                 target_wa = "62" + target_wa[1:]
@@ -263,13 +380,13 @@ if menu == "💬 WA Generator & Broadcast":
                 if "JENIS" in str(col).upper() and pd.notna(sup_row[col]) and str(sup_row[col]).strip() != "":
                     jenis_bb_list.append(normalisasi(sup_row[col]))
         else:
-            selected_sup_name = "Supplier Tani"
+            selected_sup_name = "Supplier Example"
             kode_sup = "SUP-001"
             target_wa = "6285169796974"
             form_link = WEB_APP_URL
             jenis_bb_list = []
 
-        # Filter Daftar Bahan Baku Sesuai Jenis BB Supplier (Logic Apps Script)
+        # Filter Daftar Bahan Baku Sesuai Jenis BB Supplier
         draf_list_bahan = ""
         item_count = 0
         
@@ -288,7 +405,6 @@ if menu == "💬 WA Generator & Broadcast":
         if item_count == 0:
             draf_list_bahan = "(Semua Jenis Bahan Baku Operasional)\n"
 
-        # Menyusun Pesan Akhir Berdasarkan Template
         pesan_jadi = cfg["template_text"].format(
             NAMA_SUPPLIER=selected_sup_name,
             PERIODE_MINGGU=cfg["periode_default"],
@@ -298,63 +414,32 @@ if menu == "💬 WA Generator & Broadcast":
             WA_ADMIN=cfg["wa_admin"]
         )
 
-        st.info(f"📌 **Target**: {selected_sup_name} | **No WA**: +{target_wa}\n\n📋 **Total Item Relevan**: {item_count} Bahan Baku")
+        st.info(f"📌 **Target**: {selected_sup_name} ({kode_sup})\n\n📞 **WA**: +{target_wa}\n\n📋 **Total Item**: {item_count} Bahan Baku")
 
     with col_right:
-        st.markdown("##### ✏️ **2. Pratinjau & Edit Pesan (Khusus Supplier Ini)**")
-        
-        # Pesan fleksibel yang dapat disesuaikan lagi per supplier jika ada catatan khusus
-        final_message = st.text_area("Pesan WhatsApp Siap Kirim:", value=pesan_jadi, height=320)
+        st.markdown("##### ✏️ **2. Pratinjau Teks & Kirim**")
+        final_message = st.text_area("Pratinjau Pesan WA (Bisa Diedit):", value=pesan_jadi, height=320)
         
         encoded_message = urllib.parse.quote(final_message)
         wa_link = f"https://wa.me/{target_wa}?text={encoded_message}"
         
         st.markdown(f"""
         <div class="wa-card">
-            <p style="margin:0; font-weight:bold; color:#1e293b;">🚀 Siap Kirim via WhatsApp</p>
-            <p style="margin:5px 0 0 0; font-size:13px; color:#64748b;">Klik tombol di bawah untuk membuka aplikasi WhatsApp Web / Mobile dan langsung mengirimkan pesan di atas.</p>
+            <p style="margin:0; font-weight:bold; color:#1e293b;">🚀 Langsung Kirim Ke WhatsApp Supplier</p>
+            <p style="margin:5px 0 0 0; font-size:13px; color:#64748b;">Aplikasi akan membuka WhatsApp secara otomatis dengan nomor tujuan dan pesan terformat di atas.</p>
             <a href="{wa_link}" target="_blank" class="wa-button">
-                📲 KIRIM PESAN WA (1-KLIK)
+                📲 KIRIM PESAN WA SEKARANG (1-KLIK)
             </a>
         </div>
         """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL 2: DATA SUPPLIER & LINK
+# MODUL 5 & 6: MATRIKS JARAK & SCORING
 # ---------------------------------------------------------
-elif menu == "🤝 Data Supplier & Link":
-    st.subheader("🤝 Kelola Data Supplier & Token Form Web App")
-    
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        if st.button("➕ Tambah Supplier Baru", type="primary", use_container_width=True):
-            open_add_supplier_dialog()
-            
-    with col2:
-        output = io.BytesIO()
-        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            st.session_state["df_harga_bb"].to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
-            st.session_state["df_supplier_state"].to_excel(writer, index=False, sheet_name='Supplier Link')
-        
-        st.download_button(
-            label="📥 Download Data Supplier & Master Harga (Excel)",
-            data=output.getvalue(),
-            file_name="Data_Supplier_dan_Master_Harga.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-        
-    st.markdown("---")
-    df_sup = st.session_state["df_supplier_state"]
-    if not df_sup.empty:
-        df_sup["LINK FORM"] = df_sup["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}" if pd.notna(t) else "")
-        st.dataframe(df_sup, use_container_width=True)
-    else:
-        st.info("Belum ada data supplier.")
+elif menu == "🚛 Matriks Jarak & Logistik":
+    st.subheader("🚛 Matriks Jarak Dapur & Supplier")
+    st.info("Modul kalkulasi matriks jarak logistik aktif.")
 
-# ---------------------------------------------------------
-# MODUL 3: MASTER HARGA BAHAN BAKU
-# ---------------------------------------------------------
-elif menu == "📊 Master Harga Bahan Baku":
-    st.subheader("📊 Master Data Bahan Baku (`UPDATE HARGA BB`)")
-    st.dataframe(st.session_state["df_harga_bb"], use_container_width=True)
+elif menu == "🎯 Scoring & Evaluasi Supplier":
+    st.subheader("🎯 Scoring & Evaluasi Supplier")
+    st.info("Modul scoring otomatis berdasarkan penawaran harga & jarak aktif.")
