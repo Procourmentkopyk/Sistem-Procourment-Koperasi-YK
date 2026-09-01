@@ -22,7 +22,7 @@ WEB_APP_URL = "https://sistem-procurement-koperasi-yk.streamlit.app"
 def buat_token(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-# Custom CSS untuk Table Styling
+# Custom CSS untuk Table & Card Styling
 st.markdown("""
 <style>
     .header-card {
@@ -40,20 +40,6 @@ st.markdown("""
         font-weight: bold;
         border-radius: 6px;
         margin-bottom: 8px;
-    }
-    .row-even {
-        background-color: #f8fafc;
-        padding: 8px 10px;
-        border-radius: 6px;
-        margin-bottom: 4px;
-        border: 1px solid #e2e8f0;
-    }
-    .row-odd {
-        background-color: #ffffff;
-        padding: 8px 10px;
-        border-radius: 6px;
-        margin-bottom: 4px;
-        border: 1px solid #e2e8f0;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -82,7 +68,7 @@ def load_data():
 data_excel, file_status = load_data()
 
 # ---------------------------------------------------------
-# INITIALIZE SESSION STATES
+# INITIALIZE SESSION STATES (AMANKAN AGAR TIDAK TER-RESET)
 # ---------------------------------------------------------
 # 1. State Dapur
 if "df_dapur_state" not in st.session_state:
@@ -126,8 +112,8 @@ if "df_supplier_state" not in st.session_state:
         "TOKEN", "LINK FORM", "PIC", "ALAMAT"
     ])
 
-# 3. State Harga BB / Penawaran
-if "df_harga_bb" not in st.session_state:
+# 3. State Harga BB / Penawaran (PERBAIKAN: Selalu pertahankan jika sudah ada)
+if "df_harga_bb" not in st.session_state or st.session_state["df_harga_bb"] is None:
     st.session_state["df_harga_bb"] = pd.DataFrame(columns=[
         "KODE SUPPLIER", "NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "SATUAN", "KATEGORI", "CATATAN"
     ])
@@ -416,7 +402,7 @@ with st.sidebar:
         "🎯 Scoring & Evaluasi",
         "📈 HET & Komparasi Pasar"
     ]
-    menu = st.radio("Pilih Modul:", modul_options, index=0)
+    menu = st.radio("Pilih Modul:", modul_options, index=1)
     st.markdown("---")
     st.caption(f"Status Data: 🟢 {file_status}")
 
@@ -440,19 +426,20 @@ if menu == "📊 Dashboard & HET":
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total Dapur SPPG", len(st.session_state["df_dapur_state"]), delta="Aktif")
     m2.metric("Total Supplier", len(st.session_state["df_supplier_state"]), delta="Terdaftar")
-    m3.metric("Kategori Barang", "16 Kategori", delta="Lengkap")
+    m3.metric("Item Harga Terdaftar", len(st.session_state["df_harga_bb"]), delta="Tersimpan")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
 
 # ---------------------------------------------------------
-# MODUL 2: UPDATE HARGA BB (UPLOAD, PREVIEW TABEL, EDIT, HAPUS, ADD, DOWNLOAD)
+# MODUL 2: UPDATE HARGA BB (PERBAIKAN PERSISTENSI DATA)
 # ---------------------------------------------------------
 elif menu == "🛒 Update Harga BB":
     st.subheader("🛒 Update & Sinkronisasi Harga Bahan Baku (BB)")
     st.caption("Kelola data penawaran harga BB dari supplier baik secara manual, sinkronisasi link form, maupun upload file Excel/CSV.")
 
+    # AMBIL DATA PERSISTEN DARI SESSION STATE
     df_harga = st.session_state["df_harga_bb"]
 
-    # --- FITUR UPLOAD, PREVIEW TABEL, & TEMPLATE ---
+    # --- FITUR UPLOAD, PREVIEW TABEL, & SIMPAN PERMANEN ---
     with st.expander("📂 **Upload File Harga Bahan Baku (Excel / CSV)**", expanded=False):
         c_up1, c_up2 = st.columns([3, 1])
         
@@ -487,7 +474,7 @@ elif menu == "🛒 Update Harga BB":
                 use_container_width=True
             )
 
-        # PROSES & MENAMPILKAN TABEL ISI FILE SECARA LANGSUNG (PREVIEW)
+        # PROSES UPLOAD & PREVIEW
         if uploaded_bb_file is not None:
             try:
                 if uploaded_bb_file.name.endswith('.csv'):
@@ -502,11 +489,11 @@ elif menu == "🛒 Update Harga BB":
                 else:
                     df_up = pd.read_excel(uploaded_bb_file)
 
-                st.success(f"✅ File **{uploaded_bb_file.name}** berhasil dimuat! Ditemukan **{len(df_up)}** baris data:")
+                st.success(f"✅ File **{uploaded_bb_file.name}** berhasil dibaca! Ditemukan **{len(df_up)}** baris data.")
                 
                 # PREVIEW TABEL UNTUK USER
                 st.markdown("##### 📄 Preview Tabel Data dari File Upload:")
-                st.dataframe(df_up, use_container_width=True, height=280)
+                st.dataframe(df_up, use_container_width=True, height=250)
 
                 # Mapping Kolom Otomatis
                 cols_upper = {str(c).strip().upper(): c for c in df_up.columns}
@@ -532,17 +519,17 @@ elif menu == "🛒 Update Harga BB":
                 st.markdown("---")
                 c_opt1, c_opt2 = st.columns([2, 1])
                 with c_opt1:
-                    mode_append = st.radio("Metode Impor ke Sistem:", ["Gabungkan dengan Data Lama (Append)", "Ganti Seluruh Data (Replace)"], horizontal=True)
+                    mode_append = st.radio("Metode Impor ke Database:", ["Gabungkan dengan Data Lama (Append)", "Ganti Seluruh Data (Replace)"], horizontal=True)
                 with c_opt2:
                     st.write("")
-                    if st.button("🚀 Simpan Tabel Ini ke Sistem", type="primary", use_container_width=True):
+                    if st.button("🚀 Simpan Permanen Data Ini", type="primary", use_container_width=True):
                         if "Replace" in mode_append:
-                            st.session_state["df_harga_bb"] = mapped_bb
+                            st.session_state["df_harga_bb"] = mapped_bb.reset_index(drop=True)
                         else:
-                            st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], mapped_bb], ignore_index=True)
+                            st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], mapped_bb], ignore_index=True).reset_index(drop=True)
                         
                         st.balloons()
-                        st.success(f"✅ Berhasil menyimpan {len(mapped_bb)} item ke database sistem!")
+                        st.success(f"✅ Berhasil menyimpan {len(mapped_bb)} item ke memori sistem!")
                         st.rerun()
 
             except Exception as e:
@@ -550,14 +537,15 @@ elif menu == "🛒 Update Harga BB":
 
     st.markdown("---")
 
-    # Filter & Aksi Baris Atas
+    # Filter & Baris Kontrol
     col_search, col_kat, col_add, col_dl = st.columns([2.5, 2, 1.5, 1.5])
 
     with col_search:
         search_query = st.text_input("🔍 Cari Item / Supplier", placeholder="Ketik nama item atau supplier...")
 
     with col_kat:
-        kat_filter = st.selectbox("📂 Filter Kategori", ["Semua Kategori"] + list(set(df_harga["KATEGORI"].dropna().tolist())) if not df_harga.empty else ["Semua Kategori"])
+        list_kat_unique = list(set(df_harga["KATEGORI"].dropna().tolist())) if not df_harga.empty else []
+        kat_filter = st.selectbox("📂 Filter Kategori", ["Semua Kategori"] + list_kat_unique)
 
     with col_add:
         st.write("")
@@ -573,7 +561,7 @@ elif menu == "🛒 Update Harga BB":
             df_harga.to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
         
         st.download_button(
-            label="📥 Download Sheet BB",
+            label="📥 Export Excel",
             data=output_harga.getvalue(),
             file_name="Update_Harga_BB_Koperasi_YK.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -582,19 +570,19 @@ elif menu == "🛒 Update Harga BB":
 
     st.markdown("---")
 
-    # Tampilan Ringkasan
+    # Metrics Ringkasan
     total_penawaran = len(df_harga)
     total_supplier_aktif = df_harga["NAMA SUPPLIER"].nunique() if not df_harga.empty else 0
     
     k1, k2, k3 = st.columns(3)
-    k1.metric("Total Entry Penawaran", f"{total_penawaran} Item")
+    k1.metric("Total Entry Tersimpan", f"{total_penawaran} Item")
     k2.metric("Supplier Berpartisipasi", f"{total_supplier_aktif} Supplier")
-    k3.metric("Status Sinkronisasi", "🟢 Real-time Active")
+    k3.metric("Status Penyimpanan", "🟢 Permanen Dalam Session State")
 
     st.markdown("---")
     st.markdown("##### 📋 **Tabel Rincian Update Harga Bahan Baku**")
 
-    # Terapkan Filter
+    # Menerapkan Filter pada Data State
     df_filtered = df_harga.copy()
 
     if kat_filter != "Semua Kategori":
@@ -608,7 +596,7 @@ elif menu == "🛒 Update Harga BB":
         ]
 
     if df_filtered.empty:
-        st.info("Belum ada data penawaran harga BB atau tidak ada data yang cocok dengan filter.")
+        st.info("Belum ada data penawaran harga BB tersimpan atau tidak ada yang cocok dengan pencarian.")
     else:
         # Header Tabel Custom
         h_cols = st.columns([1.0, 2.0, 2.2, 1.5, 0.8, 1.5, 2.0, 0.5, 0.5])
@@ -617,7 +605,7 @@ elif menu == "🛒 Update Harga BB":
             col.markdown(f"**{h}**")
         st.markdown("<hr style='margin-top:0; margin-bottom:10px;'>", unsafe_allow_html=True)
 
-        # Loop Menampilkan Data per Baris
+        # Loop Baris Data
         for i, r in df_filtered.iterrows():
             bg_color = "#f8fafc" if i % 2 == 0 else "#ffffff"
             with st.container():
@@ -699,14 +687,14 @@ elif menu == "🏬 Kelola Data Dapur":
                 else:
                     c_map.write("-")
                 
-                if c_edit.button("✏️", key=f"edit_{i}"):
+                if c_edit.button("✏️", key=f"edit_dp_{i}"):
                     open_edit_dapur_dialog(i)
-                if c_del.button("🗑️", key=f"del_{i}"):
+                if c_del.button("🗑️", key=f"del_dp_{i}"):
                     open_delete_dapur_dialog(i)
                 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL LAINNYA (PLACEHOLDER DEFAULTS)
+# MODUL LAINNYA
 # ---------------------------------------------------------
 else:
     st.info(f"Modul **{menu}** siap dikembangkan lebih lanjut sesuai kebutuhan operasional Koperasi YK.")
