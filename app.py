@@ -1,6 +1,12 @@
-# ---------------------------------------------------------
-# MODUL 3: DATA SUPPLIER & LINK FORM
-# ---------------------------------------------------------
+# --- PILIHAN MENU DARI SIDEBAR ---
+if menu == "📊 Dashboard & HET":
+    st.subheader("📊 Dashboard Utama & Pemantauan HET")
+    # ... (kode modul dashboard) ...
+
+elif menu == "🏬 Kelola Data Dapur":
+    st.subheader("🏬 Manajemen Data Dapur SPPG & Peta Sebaran")
+    # ... (kode modul dapur) ...
+
 elif menu == "🤝 Data Supplier & Link Form":
     st.subheader("🤝 Kelola Data Supplier & Link Web App")
     
@@ -17,7 +23,7 @@ elif menu == "🤝 Data Supplier & Link Form":
                 else:
                     df_upload = pd.read_excel(uploaded_file)
                 
-                # Deteksi baris header jika terdapat judul/empty row di atasnya (seperti baris 3-4 di Google Sheets)
+                # Deteksi baris header jika terdapat judul/empty row di atasnya
                 if "Supp Code" not in df_upload.columns and "Supplier Name" not in df_upload.columns:
                     for i in range(min(10, len(df_upload))):
                         row_vals = df_upload.iloc[i].astype(str).tolist()
@@ -26,10 +32,10 @@ elif menu == "🤝 Data Supplier & Link Form":
                             df_upload = df_upload.iloc[i+1:].reset_index(drop=True)
                             break
 
-                # Cleaning nama kolom (hapus spasi berlebih)
+                # Cleaning nama kolom
                 df_upload.columns = [str(c).strip() for c in df_upload.columns]
                 
-                # Pemetaan/Mapping Nama Kolom dari Spreadsheet ke Format Sistem
+                # Mapping Nama Kolom
                 mapped_df = pd.DataFrame()
                 
                 # 1. Kode Supplier
@@ -60,18 +66,17 @@ elif menu == "🤝 Data Supplier & Link Form":
                 mapped_df["JENIS BB 2"] = "-"
                 mapped_df["JENIS BB 3"] = "-"
 
-                # 5. Generate Token Unik & Link Form Otomatis
+                # 5. Token Unik & Link Form
                 mapped_df["TOKEN"] = [buat_token() for _ in range(len(mapped_df))]
                 mapped_df["LINK FORM"] = mapped_df["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}")
 
-                # Kolom Tambahan (PIC & Alamat jika ada)
+                # Kolom Tambahan (PIC & Alamat)
                 col_pic = next((c for c in df_upload.columns if 'PIC' in c.upper()), None)
                 mapped_df["PIC"] = df_upload[col_pic].astype(str) if col_pic else "-"
                 
                 col_alamat = next((c for c in df_upload.columns if 'ALAMAT' in c.upper()), None)
                 mapped_df["ALAMAT"] = df_upload[col_alamat].astype(str) if col_alamat else "-"
 
-                # Menghapus baris yang kosong/nan
                 mapped_df = mapped_df.dropna(subset=["NAMA SUPPLIER"]).reset_index(drop=True)
 
                 st.success(f"✅ Berhasil membaca **{len(mapped_df)} data supplier** dari file!")
@@ -141,3 +146,9 @@ elif menu == "🤝 Data Supplier & Link Form":
                         st.rerun()
     else:
         st.info("Belum ada data supplier. Silakan upload file Excel di atas atau tambah secara manual.")
+
+elif menu == "💬 WA & PO Generator":
+    # ... (kode modul WA) ...
+
+else:
+    # ... (kode modul default) ...
