@@ -3,12 +3,12 @@ import pandas as pd
 import numpy as np
 import os
 
-# Konfigurasi Halaman Clean Mode
+# Konfigurasi Halaman (Sidebar dimulai dalam keadaan Terbuka, tapi bisa di-minimize 1 klik)
 st.set_page_config(
     page_title="SPPG Procurement Engine | Koperasi YK",
     page_icon="⚡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded" # Lebih nyaman agar menu langsung terlihat, bisa di-minimize via ikon '<'
 )
 
 # Custom CSS
@@ -16,7 +16,7 @@ st.markdown("""
 <style>
     .header-card {
         background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
-        padding: 1.5rem;
+        padding: 1.25rem 1.5rem;
         border-radius: 12px;
         color: white;
         margin-bottom: 1.5rem;
@@ -31,13 +31,9 @@ st.markdown("""
         color: #065f46;
         background-color: #d1fae5;
     }
-    div.stButton > button {
-        border-radius: 8px;
-        transition: all 0.2s ease-in-out;
-    }
-    div.stButton > button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    /* Styling Tombol Menu Sidebar */
+    .stSidebar [data-testid="stRadioButton"] > label {
+        display: none;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -63,16 +59,11 @@ def load_data():
 
 data_excel, file_status = load_data()
 
-# Inisialisasi Session State Modul
-if "current_modul" not in st.session_state:
-    st.session_state["current_modul"] = "2. Kelola Data Dapur SPPG"
-
-# Inisialisasi & Cleaning Data Dapur (Latitude/Longitude Tetap Ada)
+# Inisialisasi Data Dapur di Session State
 if "df_dapur_state" not in st.session_state:
     if data_excel and isinstance(data_excel, dict) and "Data Dapur" in data_excel:
         raw_df = data_excel["Data Dapur"].copy()
         
-        # Deteksi Header jika terbungkus Unnamed
         if "Unnamed" in str(raw_df.columns[0]):
             header_idx = raw_df[raw_df.apply(lambda row: row.astype(str).str.contains('NAMA DAPUR').any(), axis=1)].index
             if not header_idx.empty:
@@ -81,18 +72,13 @@ if "df_dapur_state" not in st.session_state:
                 raw_df = raw_df.iloc[idx+1:].reset_index(drop=True)
                 raw_df = raw_df.dropna(how="all", subset=["NAMA DAPUR"])
         
-        # Bersihkan nama kolom
         raw_df.columns = [str(c).strip().upper() for c in raw_df.columns]
-        
-        # Kolom yang dipertahankan
         cols_to_keep = [c for c in ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGTITUDE", "LONGITUDE", "KOTA/KABUPATEN"] if c in raw_df.columns]
         df_clean = raw_df[cols_to_keep].copy()
         
-        # Standardisasi Nama Kolom Longitude
         if "LONGTITUDE" in df_clean.columns:
             df_clean = df_clean.rename(columns={"LONGTITUDE": "LONGITUDE"})
             
-        # Konversi Lat/Lon ke Angka/Float
         df_clean["LATITUDE"] = pd.to_numeric(df_clean["LATITUDE"], errors="coerce")
         df_clean["LONGITUDE"] = pd.to_numeric(df_clean["LONGITUDE"], errors="coerce")
         
@@ -189,52 +175,49 @@ def open_delete_dapur_dialog(index):
             st.success("Data dapur berhasil dihapus!")
             st.rerun()
 
+# --- SIDEBAR: NAVIGASI MODUL OPERASIONAL (STAY ON SIDE & CAN BE MINIMIZED) ---
+with st.sidebar:
+    st.markdown("### ⚡ **SPPG Engine**")
+    st.caption("Koperasi YK")
+    st.markdown("---")
+    
+    st.subheader("🚀 Modul Operasional")
+    
+    modul_options = [
+        "📊 Dashboard & HET",
+        "🏬 Kelola Data Dapur",
+        "💬 WA & PO Generator",
+        "🚛 Matriks Jarak",
+        "🎯 Scoring & Evaluasi",
+        "📈 HET & Komparasi Pasar"
+    ]
+    
+    menu = st.radio(
+        "Pilih Modul:",
+        modul_options,
+        index=1  # Default langsung ke Kelola Data Dapur
+    )
+    
+    st.markdown("---")
+    st.caption(f"Status Data: 🟢 {file_status}")
+    st.info("💡 **Tips:** Klik ikon panah **`<`** di atas sidebar ini untuk **minimize/menyembunyikan** menu agar layar menjadi penuh.")
+
 # --- HEADER UTAMA ---
 st.markdown(f"""
 <div class="header-card">
     <div style="display: flex; justify-content: space-between; align-items: center;">
         <div>
-            <h2 style="margin:0; color: white;">🏭 Enterprise Procurement & Evaluation System</h2>
+            <h2 style="margin:0; color: white;">🏭 Enterprise Procurement System</h2>
             <p style="margin:0; opacity: 0.8;">Koperasi YK — Sistem Evaluasi Supplier & Dapur SPPG</p>
-        </div>
-        <div>
-            <span class="status-badge">🟢 Data: {file_status}</span>
         </div>
     </div>
 </div>
 """, unsafe_allow_html=True)
 
-# --- NAVIGASI MODUL ---
-st.markdown("##### 🚀 **Pilih Modul Operasional:**")
-nav_col1, nav_col2, nav_col3, nav_col4, nav_col5, nav_col6 = st.columns(6)
-
-with nav_col1:
-    if st.button("📊 Dashboard", use_container_width=True):
-        st.session_state["current_modul"] = "1. Dashboard & HET"
-with nav_col2:
-    if st.button("🏬 Kelola Dapur", use_container_width=True):
-        st.session_state["current_modul"] = "2. Kelola Data Dapur SPPG"
-with nav_col3:
-    if st.button("💬 WA & PO", use_container_width=True):
-        st.session_state["current_modul"] = "3. Penawaran WA & Update Harga PO"
-with nav_col4:
-    if st.button("🚛 Matriks Jarak", use_container_width=True):
-        st.session_state["current_modul"] = "4. Data Supplier & Matriks Jarak"
-with nav_col5:
-    if st.button("🎯 Scoring", use_container_width=True):
-        st.session_state["current_modul"] = "5. Penilaian & Penentuan Supplier per Dapur"
-with nav_col6:
-    if st.button("📈 HET & Pasar", use_container_width=True):
-        st.session_state["current_modul"] = "6. Analisis Komparasi Harga Pasar & HET"
-
-st.markdown("---")
-
-menu = st.session_state["current_modul"]
-
 # ---------------------------------------------------------
 # MODUL 2: KELOLA DATA DAPUR SPPG
 # ---------------------------------------------------------
-if menu == "2. Kelola Data Dapur SPPG":
+if menu == "🏬 Kelola Data Dapur":
     st.subheader("🏬 Manajemen Data Dapur SPPG & Peta Sebaran")
     
     df_dapur = st.session_state["df_dapur_state"]
@@ -251,7 +234,6 @@ if menu == "2. Kelola Data Dapur SPPG":
     map_data = df_dapur.dropna(subset=["LATITUDE", "LONGITUDE"]).copy()
     
     if not map_data.empty:
-        # Standardisasi kolom lat/lon khusus untuk st.map
         map_df = pd.DataFrame({
             "lat": map_data["LATITUDE"].astype(float),
             "lon": map_data["LONGITUDE"].astype(float)
@@ -262,9 +244,8 @@ if menu == "2. Kelola Data Dapur SPPG":
         
     st.markdown("---")
     
-    # --- TABEL DATA DAPUR DENGAN KOORDINAT & LINK GOOGLE MAPS ---
+    # --- TABEL DATA DAPUR ---
     if not df_dapur.empty:
-        # Header Kolom
         cols = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
         headers = ["KODE", "NAMA DAPUR", "ALAMAT", "PIC", "LATITUDE", "LONGITUDE", "MAPS", "EDIT", "HAPUS"]
         
@@ -272,7 +253,6 @@ if menu == "2. Kelola Data Dapur SPPG":
             col.markdown(f"**{h}**")
         st.markdown("---")
         
-        # Baris Data
         for i, r in df_dapur.iterrows():
             c_kode, c_nama, c_alamat, c_pic, c_lat, c_lon, c_map, c_edit, c_del = st.columns([0.8, 1.8, 2.5, 1.0, 1.2, 1.2, 1.0, 0.5, 0.5])
             
@@ -286,30 +266,34 @@ if menu == "2. Kelola Data Dapur SPPG":
             c_lat.write(f"{lat_val:.5f}" if pd.notna(lat_val) else "-")
             c_lon.write(f"{lon_val:.5f}" if pd.notna(lon_val) else "-")
             
-            # Direct Link Google Maps
             if pd.notna(lat_val) and pd.notna(lon_val):
                 gmap_url = f"https://www.google.com/maps/search/?api=1&query={lat_val},{lon_val}"
                 c_map.markdown(f"[📍 Buka]({gmap_url})")
             else:
                 c_map.write("-")
             
-            # Tombol Edit
             if c_edit.button("✏️", key=f"edit_{i}"):
                 open_edit_dapur_dialog(i)
                 
-            # Tombol Hapus
             if c_del.button("🗑️", key=f"del_{i}"):
                 open_delete_dapur_dialog(i)
     else:
         st.info("Belum ada data dapur. Klik 'Tambah Dapur Baru' untuk menambahkan.")
 
 # ---------------------------------------------------------
-# MODUL LAINNYA
+# MODUL 1: DASHBOARD
 # ---------------------------------------------------------
-elif menu == "1. Dashboard & HET":
+elif menu == "📊 Dashboard & HET":
     st.subheader("📊 Dashboard Utama & Pemantauan HET")
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total Dapur SPPG", len(st.session_state["df_dapur_state"]), delta="Active")
     m2.metric("Total Supplier", "45 Supplier", delta="+3 Bulan Ini")
     m3.metric("Kategori Barang", "6 Kategori", delta="Lengkap")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
+
+# ---------------------------------------------------------
+# MODUL LAINNYA (PLACEHOLDER)
+# ---------------------------------------------------------
+else:
+    st.subheader(f"Modul {menu}")
+    st.info("Modul sedang aktif dan dapat diakses dari sidebar sebelah kiri.")
