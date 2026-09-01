@@ -291,6 +291,113 @@ def open_delete_dapur_dialog(index):
             st.rerun()
 
 # ---------------------------------------------------------
+# DIALOGS / POP-UP ITEM HARGA BAHAN BAKU (FITUR BARU)
+# ---------------------------------------------------------
+@st.dialog("➕ Tambah Item Bahan Baku Baru")
+def open_add_harga_bb_dialog():
+    st.write("Masukkan detail penawaran / harga bahan baku baru:")
+    with st.form("form_add_harga_bb"):
+        c1, c2 = st.columns(2)
+        with c1:
+            df_sup = st.session_state.get("df_supplier_state", pd.DataFrame())
+            list_supplier = df_sup["NAMA SUPPLIER"].tolist() if not df_sup.empty and "NAMA SUPPLIER" in df_sup.columns else ["MANUAL / INTERNAL"]
+            nama_sup = st.selectbox("Pilih Supplier", options=list_supplier)
+            
+            kode_sup = "INTERNAL"
+            if not df_sup.empty and "NAMA SUPPLIER" in df_sup.columns:
+                match = df_sup[df_sup["NAMA SUPPLIER"] == nama_sup]
+                if not match.empty:
+                    kode_sup = match.iloc[0].get("KODE SUPPLIER", "SUP-000")
+
+            nama_bb = st.text_input("Nama Bahan Baku / Item", placeholder="Contoh: Daging Sapi Segar")
+            harga = st.number_input("Harga per Satuan (Rp)", min_value=0, step=500, value=15000)
+            
+        with c2:
+            satuan = st.selectbox("Satuan", ["Kg", "Liter", "Ikat", "Pcs", "Karton", "Ekor", "Pack", "Gram", "Kg/Ikat"])
+            kategori = st.selectbox("Kategori", [
+                "Ayam", "Beras", "Buah", "Cookies", "Daging", "Ikan", 
+                "Keju", "Olahan", "Sayur", "Sembako", "Susu", "Tahu", 
+                "Tempe", "Telur Ayam", "Telur Bebek", "Telur Puyuh"
+            ])
+            catatan = st.text_input("Catatan / Keterangan", placeholder="Contoh: Kualitas super / Grade A")
+
+        if st.form_submit_button("✨ Simpan Item BB", use_container_width=True):
+            if nama_bb.strip() == "":
+                st.error("Nama Bahan Baku wajib diisi!")
+            else:
+                new_row = pd.DataFrame([{
+                    "KODE SUPPLIER": kode_sup,
+                    "NAMA SUPPLIER": nama_sup,
+                    "NAMA BB": nama_bb,
+                    "HARGA PER SATUAN": harga,
+                    "SATUAN": satuan,
+                    "KATEGORI": kategori,
+                    "CATATAN": catatan
+                }])
+                st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], new_row], ignore_index=True)
+                st.success("Item Bahan Baku berhasil ditambahkan!")
+                st.rerun()
+
+@st.dialog("✏️ Edit Item Bahan Baku")
+def open_edit_harga_bb_dialog(index):
+    df = st.session_state["df_harga_bb"]
+    row = df.iloc[index]
+    
+    st.write(f"Edit harga/item untuk: **{row.get('NAMA BB', 'Item BB')}**")
+    with st.form("form_edit_harga_bb"):
+        c1, c2 = st.columns(2)
+        with c1:
+            kode_sup = st.text_input("Kode Supplier", value=str(row.get("KODE SUPPLIER", "")))
+            nama_sup = st.text_input("Nama Supplier", value=str(row.get("NAMA SUPPLIER", "")))
+            nama_bb = st.text_input("Nama Bahan Baku", value=str(row.get("NAMA BB", "")))
+            harga = st.number_input("Harga per Satuan (Rp)", value=int(row.get("HARGA PER SATUAN", 0)), step=500)
+            
+        with c2:
+            list_satuan = ["Kg", "Liter", "Ikat", "Pcs", "Karton", "Ekor", "Pack", "Gram", "Kg/Ikat"]
+            curr_satuan = str(row.get("SATUAN", "Kg"))
+            idx_sat = list_satuan.index(curr_satuan) if curr_satuan in list_satuan else 0
+            satuan = st.selectbox("Satuan", list_satuan, index=idx_sat)
+
+            list_kat = [
+                "Ayam", "Beras", "Buah", "Cookies", "Daging", "Ikan", 
+                "Keju", "Olahan", "Sayur", "Sembako", "Susu", "Tahu", 
+                "Tempe", "Telur Ayam", "Telur Bebek", "Telur Puyuh"
+            ]
+            curr_kat = str(row.get("KATEGORI", "Sayur"))
+            idx_kat = list_kat.index(curr_kat) if curr_kat in list_kat else 0
+            kategori = st.selectbox("Kategori", list_kat, index=idx_kat)
+            
+            catatan = st.text_input("Catatan / Merek", value=str(row.get("CATATAN", "")))
+
+        if st.form_submit_button("💾 Perbarui Item BB", use_container_width=True):
+            st.session_state["df_harga_bb"].at[index, "KODE SUPPLIER"] = kode_sup
+            st.session_state["df_harga_bb"].at[index, "NAMA SUPPLIER"] = nama_sup
+            st.session_state["df_harga_bb"].at[index, "NAMA BB"] = nama_bb
+            st.session_state["df_harga_bb"].at[index, "HARGA PER SATUAN"] = harga
+            st.session_state["df_harga_bb"].at[index, "SATUAN"] = satuan
+            st.session_state["df_harga_bb"].at[index, "KATEGORI"] = kategori
+            st.session_state["df_harga_bb"].at[index, "CATATAN"] = catatan
+            st.success("Data Bahan Baku berhasil diperbarui!")
+            st.rerun()
+
+@st.dialog("🗑️ Konfirmasi Hapus Item BB")
+def open_delete_harga_bb_dialog(index):
+    df = st.session_state["df_harga_bb"]
+    nama_item = df.iloc[index].get("NAMA BB", "Item ini")
+    nama_sup = df.iloc[index].get("NAMA SUPPLIER", "-")
+    
+    st.warning(f"Apakah Anda yakin ingin menghapus item **{nama_item}** dari **{nama_sup}**?")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Batal", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Ya, Hapus Item", type="primary", use_container_width=True):
+            st.session_state["df_harga_bb"] = st.session_state["df_harga_bb"].drop(index).reset_index(drop=True)
+            st.success("Item berhasil dihapus!")
+            st.rerun()
+
+# ---------------------------------------------------------
 # SIDEBAR NAVIGASI ADMIN
 # ---------------------------------------------------------
 with st.sidebar:
@@ -301,6 +408,7 @@ with st.sidebar:
     
     modul_options = [
         "📊 Dashboard & HET",
+        "🛒 Update Harga BB",
         "🏬 Kelola Data Dapur",
         "🤝 Data Supplier & Link Form",
         "💬 WA & PO Generator",
@@ -334,6 +442,108 @@ if menu == "📊 Dashboard & HET":
     m2.metric("Total Supplier", len(st.session_state["df_supplier_state"]), delta="Terdaftar")
     m3.metric("Kategori Barang", "16 Kategori", delta="Lengkap")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
+
+# ---------------------------------------------------------
+# MODUL BARU: UPDATE HARGA BB (SINKRONISASI, EDIT, HAPUS, ADD, DOWNLOAD)
+# ---------------------------------------------------------
+elif menu == "🛒 Update Harga BB":
+    st.subheader("🛒 Update & Sinkronisasi Harga Bahan Baku (BB)")
+    st.caption("Data hasil inputan supplier via Link Form secara terpisah disinkronkan di halaman ini.")
+
+    df_harga = st.session_state["df_harga_bb"]
+
+    # Filter & Aksi Baris Atas
+    col_search, col_kat, col_add, col_dl = st.columns([2.5, 2, 1.5, 1.5])
+
+    with col_search:
+        search_query = st.text_input("🔍 Cari Item / Supplier", placeholder="Ketik nama item atau supplier...")
+
+    with col_kat:
+        kat_filter = st.selectbox("📂 Filter Kategori", ["Semua Kategori"] + list(set(df_harga["KATEGORI"].dropna().tolist())) if not df_harga.empty else ["Semua Kategori"])
+
+    with col_add:
+        st.write("")
+        st.write("")
+        if st.button("➕ Tambah Item BB", type="primary", use_container_width=True):
+            open_add_harga_bb_dialog()
+
+    with col_dl:
+        st.write("")
+        st.write("")
+        # Menyiapkan buffer Excel khusus sheet Update Harga BB
+        output_harga = io.BytesIO()
+        with pd.ExcelWriter(output_harga, engine='openpyxl') as writer:
+            df_harga.to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
+        
+        st.download_button(
+            label="📥 Download Sheet BB",
+            data=output_harga.getvalue(),
+            file_name="Update_Harga_BB_Koperasi_YK.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
+
+    st.markdown("---")
+
+    # Tampilan Sinkronisasi Ringkasan
+    total_penawaran = len(df_harga)
+    total_supplier_aktif = df_harga["NAMA SUPPLIER"].nunique() if not df_harga.empty else 0
+    
+    k1, k2, k3 = st.columns(3)
+    k1.metric("Total Entry Penawaran", f"{total_penawaran} Item")
+    k2.metric("Supplier Berpartisipasi", f"{total_supplier_aktif} Supplier")
+    k3.metric("Status Sinkronisasi", "🟢 Real-time Active")
+
+    st.markdown("---")
+    st.markdown("##### 📋 **Tabel Rincian Update Harga Bahan Baku**")
+
+    # Terapkan Filter
+    df_filtered = df_harga.copy()
+
+    if kat_filter != "Semua Kategori":
+        df_filtered = df_filtered[df_filtered["KATEGORI"] == kat_filter]
+
+    if search_query:
+        df_filtered = df_filtered[
+            df_filtered["NAMA BB"].astype(str).str.contains(search_query, case=False, na=False) |
+            df_filtered["NAMA SUPPLIER"].astype(str).str.contains(search_query, case=False, na=False) |
+            df_filtered["KODE SUPPLIER"].astype(str).str.contains(search_query, case=False, na=False)
+        ]
+
+    if df_filtered.empty:
+        st.info("Belum ada data penawaran harga BB atau tidak ada data yang cocok dengan filter.")
+    else:
+        # Header Tabel Custom
+        h_cols = st.columns([1.0, 2.0, 2.2, 1.5, 0.8, 1.5, 2.0, 0.5, 0.5])
+        headers = ["KODE SUPP", "NAMA SUPPLIER", "NAMA BAHAN BAKU", "HARGA (RP)", "SATUAN", "KATEGORI", "CATATAN", "EDIT", "HAPUS"]
+        for col, h in zip(h_cols, headers):
+            col.markdown(f"**{h}**")
+        st.markdown("<hr style='margin-top:0; margin-bottom:10px;'>", unsafe_allow_html=True)
+
+        # Loop Menampilkan Data per Baris
+        for i, r in df_filtered.iterrows():
+            bg_color = "#f8fafc" if i % 2 == 0 else "#ffffff"
+            with st.container():
+                st.markdown(f'<div style="background-color: {bg_color}; padding: 6px 10px; border-radius: 8px; border: 1px solid #e2e8f0; margin-bottom: 6px;">', unsafe_allow_html=True)
+                c_kodesup, c_namasup, c_namabb, c_harga, c_sat, c_kat, c_cat, c_edit, c_del = st.columns([1.0, 2.0, 2.2, 1.5, 0.8, 1.5, 2.0, 0.5, 0.5])
+
+                c_kodesup.write(f"**{r.get('KODE SUPPLIER', '-')}**")
+                c_namasup.write(r.get("NAMA SUPPLIER", "-"))
+                c_namabb.write(f"**{r.get('NAMA BB', '-')}**")
+                
+                harga_val = r.get("HARGA PER SATUAN", 0)
+                c_harga.write(f"Rp {harga_val:,.0f}" if pd.notna(harga_val) else "-")
+                
+                c_sat.write(r.get("SATUAN", "-"))
+                c_kat.write(f"`{r.get('KATEGORI', '-')}`")
+                c_cat.write(r.get("CATATAN", "-") if pd.notna(r.get("CATATAN")) and r.get("CATATAN") != "" else "-")
+
+                if c_edit.button("✏️", key=f"edit_bb_{i}"):
+                    open_edit_harga_bb_dialog(i)
+                if c_del.button("🗑️", key=f"del_bb_{i}"):
+                    open_delete_harga_bb_dialog(i)
+
+                st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
 # MODUL 2: KELOLA DATA DAPUR SPPG
