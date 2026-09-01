@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import pydeck as pdk
 import os
 import io
 import uuid
@@ -85,7 +86,7 @@ def load_data():
 data_excel, file_status = load_data()
 
 # =========================================================
-# INISIALISASI SESSION STATE (AGAR DATA TIDAK HILANG)
+# INISIALISASI SESSION STATE DATA
 # =========================================================
 
 # 1. SESSION STATE: DATA DAPUR
@@ -173,7 +174,11 @@ Salam,
 WA Admin: {WA_ADMIN}"""
     }
 
-# --- POP-UP DIALOG MANAGEMENT ---
+# =========================================================
+# POP-UP DIALOG MANAGEMENT (TAMBAH & EDIT)
+# =========================================================
+
+# --- DAPUR DIALOGS ---
 @st.dialog("➕ Tambah Dapur Baru")
 def open_add_dapur_dialog():
     with st.form("form_add_dapur"):
@@ -189,12 +194,39 @@ def open_add_dapur_dialog():
         if st.form_submit_button("✨ Simpan Dapur Baru", use_container_width=True):
             new_row = pd.DataFrame([{
                 "KODE": kode, "NAMA DAPUR": nama, "ALAMAT": alamat,
-                "PIC": pic, "LATITUDE": lat, "LONGITUDE": lng, "KOTA/KABUPATEN": kab
+                "PIC": pic, "LATITUDE": float(lat), "LONGITUDE": float(lng), "KOTA/KABUPATEN": kab
             }])
             st.session_state["df_dapur_state"] = pd.concat([st.session_state["df_dapur_state"], new_row], ignore_index=True)
             st.success("Dapur berhasil ditambahkan!")
             st.rerun()
 
+@st.dialog("✏️ Edit Data Dapur")
+def open_edit_dapur_dialog(index):
+    df = st.session_state["df_dapur_state"]
+    row = df.iloc[index]
+    
+    with st.form("form_edit_dapur"):
+        kode = st.text_input("Kode Dapur", value=str(row.get("KODE", "")))
+        nama = st.text_input("Nama Dapur", value=str(row.get("NAMA DAPUR", "")))
+        alamat = st.text_area("Alamat Lengkap", value=str(row.get("ALAMAT", "")))
+        pic = st.text_input("Nama PIC", value=str(row.get("PIC", "")))
+        col_lat, col_lng = st.columns(2)
+        lat = col_lat.number_input("Latitude", value=float(row.get("LATITUDE", -7.618382)), format="%.6f")
+        lng = col_lng.number_input("Longitude", value=float(row.get("LONGITUDE", 110.426078)), format="%.6f")
+        kab = st.text_input("Kota/Kabupaten", value=str(row.get("KOTA/KABUPATEN", "SLEMAN")))
+        
+        if st.form_submit_button("💾 Update Dapur", use_container_width=True):
+            st.session_state["df_dapur_state"].at[index, "KODE"] = kode
+            st.session_state["df_dapur_state"].at[index, "NAMA DAPUR"] = nama
+            st.session_state["df_dapur_state"].at[index, "ALAMAT"] = alamat
+            st.session_state["df_dapur_state"].at[index, "PIC"] = pic
+            st.session_state["df_dapur_state"].at[index, "LATITUDE"] = float(lat)
+            st.session_state["df_dapur_state"].at[index, "LONGITUDE"] = float(lng)
+            st.session_state["df_dapur_state"].at[index, "KOTA/KABUPATEN"] = kab
+            st.success("Data dapur berhasil diperbarui!")
+            st.rerun()
+
+# --- SUPPLIER DIALOGS ---
 @st.dialog("➕ Tambah Supplier Baru")
 def open_add_supplier_dialog():
     with st.form("form_add_sup"):
@@ -222,6 +254,32 @@ def open_add_supplier_dialog():
             }])
             st.session_state["df_supplier_state"] = pd.concat([st.session_state["df_supplier_state"], new_row], ignore_index=True)
             st.success("Supplier baru berhasil ditambahkan!")
+            st.rerun()
+
+@st.dialog("✏️ Edit Data Supplier")
+def open_edit_supplier_dialog(index):
+    df = st.session_state["df_supplier_state"]
+    row = df.iloc[index]
+    
+    with st.form("form_edit_sup"):
+        c1, c2 = st.columns(2)
+        with c1:
+            kode = st.text_input("Kode Supplier", value=str(row.get("KODE SUPPLIER", "")))
+            nama = st.text_input("Nama Supplier", value=str(row.get("NAMA SUPPLIER", "")))
+            no_wa = st.text_input("Nomor WA", value=str(row.get("NO WA", "6285169796974")))
+        with c2:
+            j1 = st.text_input("Jenis BB 1", value=str(row.get("JENIS BB 1", "")))
+            j2 = st.text_input("Jenis BB 2", value=str(row.get("JENIS BB 2", "")))
+            j3 = st.text_input("Jenis BB 3", value=str(row.get("JENIS BB 3", "")))
+            
+        if st.form_submit_button("💾 Update Supplier", use_container_width=True):
+            st.session_state["df_supplier_state"].at[index, "KODE SUPPLIER"] = kode
+            st.session_state["df_supplier_state"].at[index, "NAMA SUPPLIER"] = nama
+            st.session_state["df_supplier_state"].at[index, "NO WA"] = no_wa
+            st.session_state["df_supplier_state"].at[index, "JENIS BB 1"] = j1
+            st.session_state["df_supplier_state"].at[index, "JENIS BB 2"] = j2
+            st.session_state["df_supplier_state"].at[index, "JENIS BB 3"] = j3
+            st.success("Data supplier berhasil diperbarui!")
             st.rerun()
 
 # --- SIDEBAR NAVIGASI ---
@@ -268,7 +326,7 @@ if menu == "📊 Dashboard & HET":
     st.dataframe(st.session_state["df_harga_bb"], use_container_width=True)
 
 # ---------------------------------------------------------
-# MODUL 2: KELOLA DATA DAPUR
+# MODUL 2: KELOLA DATA DAPUR (LENGKAP PETA, EDIT, HAPUS)
 # ---------------------------------------------------------
 elif menu == "🏬 Kelola Data Dapur":
     st.subheader("🏬 Manajemen Data Dapur SPPG")
@@ -279,19 +337,68 @@ elif menu == "🏬 Kelola Data Dapur":
             open_add_dapur_dialog()
             
     st.markdown("---")
-    df_dapur = st.session_state["df_dapur_state"]
-    st.dataframe(df_dapur, use_container_width=True)
     
-    # Peta Sebaran Dapur
-    if "LATITUDE" in df_dapur.columns and "LONGITUDE" in df_dapur.columns:
-        st.markdown("##### 🗺️ **Peta Lokasi Dapur Operasional**")
-        map_data = df_dapur.dropna(subset=["LATITUDE", "LONGITUDE"])[["LATITUDE", "LONGITUDE"]].rename(
-            columns={"LATITUDE": "lat", "LONGITUDE": "lon"}
+    df_dapur = st.session_state["df_dapur_state"].copy()
+    
+    # --- PETA SEBARAN DAPUR (PYDECK) ---
+    st.markdown("##### 🗺️ **Peta Lokasi & Sebaran Dapur Operasional**")
+    
+    # Validasi koordinat numerik
+    df_map = df_dapur.copy()
+    df_map["LATITUDE"] = pd.to_numeric(df_map["LATITUDE"], errors="coerce")
+    df_map["LONGITUDE"] = pd.to_numeric(df_map["LONGITUDE"], errors="coerce")
+    df_map = df_map.dropna(subset=["LATITUDE", "LONGITUDE"])
+    
+    if not df_map.empty:
+        avg_lat = df_map["LATITUDE"].mean()
+        avg_lng = df_map["LONGITUDE"].mean()
+        
+        view_state = pdk.ViewState(
+            latitude=avg_lat,
+            longitude=avg_lng,
+            zoom=10,
+            pitch=30
         )
-        st.map(map_data)
+        
+        layer = pdk.Layer(
+            "ScatterplotLayer",
+            data=df_map,
+            get_position=["LONGITUDE", "LATITUDE"],
+            get_color="[225, 29, 72, 200]",
+            get_radius=350,
+            pickable=True
+        )
+        
+        r = pdk.Deck(
+            layers=[layer],
+            initial_view_state=view_state,
+            tooltip={"text": "🏬 {NAMA DAPUR}\n📌 PIC: {PIC}\n📍 Alamat: {ALAMAT}"}
+        )
+        st.pydeck_chart(r)
+    else:
+        st.warning("Belum ada data koordinat latitude/longitude yang valid untuk peta.")
+        
+    st.markdown("---")
+    st.markdown("##### 📋 **Tabel Master Data Dapur**")
+    
+    # --- TABEL LENGKAP DENGAN TOMBOL EDIT & HAPUS ---
+    for idx, row in df_dapur.iterrows():
+        with st.expander(f"🏬 **{row.get('KODE', '')} - {row.get('NAMA DAPUR', '')}** (PIC: {row.get('PIC', '-')})"):
+            c1, c2, c3 = st.columns([3, 1, 1])
+            with c1:
+                st.write(f"**Alamat:** {row.get('ALAMAT', '-')}")
+                st.write(f"**Kota/Kab:** {row.get('KOTA/KABUPATEN', '-')} | **Lat/Lng:** {row.get('LATITUDE', '-')}, {row.get('LONGITUDE', '-')}")
+            with c2:
+                if st.button("✏️ Edit", key=f"btn_edit_dapur_{idx}", use_container_width=True):
+                    open_edit_dapur_dialog(idx)
+            with c3:
+                if st.button("🗑️ Hapus", key=f"btn_del_dapur_{idx}", type="secondary", use_container_width=True):
+                    st.session_state["df_dapur_state"] = st.session_state["df_dapur_state"].drop(idx).reset_index(drop=True)
+                    st.success("Dapur berhasil dihapus.")
+                    st.rerun()
 
 # ---------------------------------------------------------
-# MODUL 3: DATA SUPPLIER & LINK FORM
+# MODUL 3: DATA SUPPLIER & LINK FORM (EDIT & HAPUS)
 # ---------------------------------------------------------
 elif menu == "🤝 Data Supplier & Link Form":
     st.subheader("🤝 Kelola Data Supplier & Link Web App")
@@ -317,10 +424,26 @@ elif menu == "🤝 Data Supplier & Link Form":
         )
         
     st.markdown("---")
-    df_sup = st.session_state["df_supplier_state"]
+    df_sup = st.session_state["df_supplier_state"].copy()
+    
     if not df_sup.empty:
-        df_sup["LINK FORM"] = df_sup["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}" if pd.notna(t) else "")
-        st.dataframe(df_sup, use_container_width=True)
+        for idx, row in df_sup.iterrows():
+            tkn = row.get("TOKEN", "")
+            form_url = f"{WEB_APP_URL}?token={tkn}" if pd.notna(tkn) else ""
+            
+            with st.expander(f"🤝 **{row.get('KODE SUPPLIER', '')} - {row.get('NAMA SUPPLIER', '')}** (WA: +{row.get('NO WA', '-')})"):
+                c1, c2, c3 = st.columns([3, 1, 1])
+                with c1:
+                    st.write(f"**Jenis BB:** {row.get('JENIS BB 1', '-')} / {row.get('JENIS BB 2', '-')} / {row.get('JENIS BB 3', '-')}")
+                    st.write(f"🔗 **Form Link:** [{form_url}]({form_url})")
+                with c2:
+                    if st.button("✏️ Edit", key=f"btn_edit_sup_{idx}", use_container_width=True):
+                        open_edit_supplier_dialog(idx)
+                with c3:
+                    if st.button("🗑️ Hapus", key=f"btn_del_sup_{idx}", type="secondary", use_container_width=True):
+                        st.session_state["df_supplier_state"] = st.session_state["df_supplier_state"].drop(idx).reset_index(drop=True)
+                        st.success("Supplier berhasil dihapus.")
+                        st.rerun()
     else:
         st.info("Belum ada data supplier.")
 
@@ -374,7 +497,6 @@ elif menu == "💬 WA Generator & Request Harga":
                 
             form_link = f"{WEB_APP_URL}?token={token_sup}"
             
-            # Ambil jenis BB supplier
             jenis_bb_list = []
             for col in sup_row.index:
                 if "JENIS" in str(col).upper() and pd.notna(sup_row[col]) and str(sup_row[col]).strip() != "":
@@ -386,7 +508,6 @@ elif menu == "💬 WA Generator & Request Harga":
             form_link = WEB_APP_URL
             jenis_bb_list = []
 
-        # Filter Daftar Bahan Baku Sesuai Jenis BB Supplier
         draf_list_bahan = ""
         item_count = 0
         
