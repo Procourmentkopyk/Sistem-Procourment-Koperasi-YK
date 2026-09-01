@@ -483,12 +483,6 @@ elif menu == "🤝 Data Supplier & Link Form":
 
 
 # ---------------------------------------------------------
-# MODUL 4 S.D 7 (FALLBACK / PLACEHOLDER)
-# ---------------------------------------------------------
-else:
-    st.subheader(f"Modul {menu}")
-    st.info("Modul ini sudah siap dan dapat dikembangkan lebih lanjut.")
-# ---------------------------------------------------------
 # MODUL 4: WA & PO GENERATOR (DENGAN EDIT KATEGORI SUPPLIER)
 # ---------------------------------------------------------
 elif menu == "💬 WA & PO Generator":
