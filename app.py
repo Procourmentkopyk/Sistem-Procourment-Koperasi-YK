@@ -213,7 +213,7 @@ if "token" in query_params:
                 st.balloons()
                 st.success(f"Berhasil! Penawaran untuk **{nama_barang}** seharga **Rp {harga_penawaran:,}** telah tersimpan.")
 
-    st.stop()  # Berhenti di sini khusus untuk akses vendor via token
+    st.stop()
 
 # ---------------------------------------------------------
 # DIALOGS / POP-UP DAPUR
@@ -291,7 +291,7 @@ def open_delete_dapur_dialog(index):
             st.rerun()
 
 # ---------------------------------------------------------
-# DIALOGS / POP-UP ITEM HARGA BAHAN BAKU (FITUR BARU)
+# DIALOGS / POP-UP ITEM HARGA BAHAN BAKU
 # ---------------------------------------------------------
 @st.dialog("➕ Tambah Item Bahan Baku Baru")
 def open_add_harga_bb_dialog():
@@ -444,13 +444,94 @@ if menu == "📊 Dashboard & HET":
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
 
 # ---------------------------------------------------------
-# MODUL BARU: UPDATE HARGA BB (SINKRONISASI, EDIT, HAPUS, ADD, DOWNLOAD)
+# MODUL: UPDATE HARGA BB (UPLOAD, SINKRONISASI, EDIT, HAPUS, ADD, DOWNLOAD)
 # ---------------------------------------------------------
 elif menu == "🛒 Update Harga BB":
     st.subheader("🛒 Update & Sinkronisasi Harga Bahan Baku (BB)")
-    st.caption("Data hasil inputan supplier via Link Form secara terpisah disinkronkan di halaman ini.")
+    st.caption("Kelola data penawaran harga BB dari supplier baik secara manual, sinkronisasi link form, maupun upload file Excel/CSV.")
 
     df_harga = st.session_state["df_harga_bb"]
+
+    # --- FITUR UPLOAD & TEMPLATE ---
+    with st.expander("📂 **Upload File Harga Bahan Baku (Excel / CSV)**", expanded=False):
+        c_up1, c_up2 = st.columns([3, 1])
+        
+        with c_up1:
+            uploaded_bb_file = st.file_uploader(
+                "Pilih file Excel / CSV yang berisi data harga BB:", 
+                type=["xlsx", "xls", "xlsb", "csv"],
+                key="upload_harga_bb"
+            )
+        
+        with c_up2:
+            st.write("**Belum Punya Format?**")
+            # Membuat Template Excel Kosong Sesuai Format
+            df_template = pd.DataFrame([{
+                "KODE SUPPLIER": "SUP-001",
+                "NAMA SUPPLIER": "PT Contoh Supplier",
+                "NAMA BB": "Daging Ayam Broiler",
+                "HARGA PER SATUAN": 35000,
+                "SATUAN": "Kg",
+                "KATEGORI": "Ayam",
+                "CATATAN": "Ukuran 1.2 kg - 1.5 kg"
+            }])
+            
+            tmpl_output = io.BytesIO()
+            with pd.ExcelWriter(tmpl_output, engine='openpyxl') as writer:
+                df_template.to_excel(writer, index=False, sheet_name='TEMPLATE_HARGA_BB')
+            
+            st.download_button(
+                label="📥 Download Template",
+                data=tmpl_output.getvalue(),
+                file_name="Template_Update_Harga_BB.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+
+        # Proses File Upload
+        if uploaded_bb_file is not None:
+            try:
+                if uploaded_bb_file.name.endswith('.csv'):
+                    df_up = pd.read_csv(uploaded_bb_file)
+                else:
+                    df_up = pd.read_excel(uploaded_bb_file)
+
+                # Standarisasi Nama Kolom
+                df_up.columns = [str(c).strip().upper() for c in df_up.columns]
+                
+                mapped_bb = pd.DataFrame()
+                
+                c_ksup = next((c for c in df_up.columns if 'KODE' in c and 'SUP' in c), None)
+                c_nsup = next((c for c in df_up.columns if 'NAMA' in c and 'SUP' in c), None)
+                c_nbb  = next((c for c in df_up.columns if 'BB' in c or 'ITEM' in c or 'BARANG' in c or 'BAHAN' in c), None)
+                c_hrg  = next((c for c in df_up.columns if 'HARGA' in c or 'PRICE' in c), None)
+                c_sat  = next((c for c in df_up.columns if 'SATUAN' in c or 'UNIT' in c), None)
+                c_kat  = next((c for c in df_up.columns if 'KAT' in c), None)
+                c_cat  = next((c for c in df_up.columns if 'CATATAN' in c or 'KET' in c or 'MEREK' in c), None)
+
+                mapped_bb["KODE SUPPLIER"] = df_up[c_ksup].astype(str) if c_ksup else "SUP-EXT"
+                mapped_bb["NAMA SUPPLIER"] = df_up[c_nsup].astype(str) if c_nsup else "Supplier External"
+                mapped_bb["NAMA BB"] = df_up[c_nbb].astype(str) if c_nbb else "Item Tanpa Nama"
+                mapped_bb["HARGA PER SATUAN"] = pd.to_numeric(df_up[c_hrg], errors='coerce').fillna(0) if c_hrg else 0
+                mapped_bb["SATUAN"] = df_up[c_sat].astype(str) if c_sat else "Kg"
+                mapped_bb["KATEGORI"] = df_up[c_kat].astype(str) if c_kat else "Sembako"
+                mapped_bb["CATATAN"] = df_up[c_cat].astype(str) if c_cat else "-"
+
+                mode_append = st.radio("Opsi Impor:", ["Gabungkan dengan Data Lama (Append)", "Ganti Seluruh Data (Replace)"], horizontal=True)
+                
+                if st.button("🚀 Proses & Simpan Data Upload", type="primary"):
+                    if mode_append == "Replace":
+                        st.session_state["df_harga_bb"] = mapped_bb
+                    else:
+                        st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], mapped_bb], ignore_index=True)
+                    
+                    st.success(f"✅ Berhasil memuat {len(mapped_bb)} item bahan baku!")
+                    st.rerun()
+
+            except Exception as e:
+                st.error(f"Gagal memproses file upload: {e}")
+
+    st.markdown("---")
 
     # Filter & Aksi Baris Atas
     col_search, col_kat, col_add, col_dl = st.columns([2.5, 2, 1.5, 1.5])
@@ -485,7 +566,7 @@ elif menu == "🛒 Update Harga BB":
 
     st.markdown("---")
 
-    # Tampilan Sinkronisasi Ringkasan
+    # Tampilan Ringkasan
     total_penawaran = len(df_harga)
     total_supplier_aktif = df_harga["NAMA SUPPLIER"].nunique() if not df_harga.empty else 0
     
