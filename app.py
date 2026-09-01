@@ -444,7 +444,7 @@ if menu == "📊 Dashboard & HET":
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
 
 # ---------------------------------------------------------
-# MODUL: UPDATE HARGA BB (UPLOAD, SINKRONISASI, EDIT, HAPUS, ADD, DOWNLOAD)
+# MODUL 2: UPDATE HARGA BB (UPLOAD, PREVIEW TABEL, EDIT, HAPUS, ADD, DOWNLOAD)
 # ---------------------------------------------------------
 elif menu == "🛒 Update Harga BB":
     st.subheader("🛒 Update & Sinkronisasi Harga Bahan Baku (BB)")
@@ -452,7 +452,7 @@ elif menu == "🛒 Update Harga BB":
 
     df_harga = st.session_state["df_harga_bb"]
 
-    # --- FITUR UPLOAD & TEMPLATE ---
+    # --- FITUR UPLOAD, PREVIEW TABEL, & TEMPLATE ---
     with st.expander("📂 **Upload File Harga Bahan Baku (Excel / CSV)**", expanded=False):
         c_up1, c_up2 = st.columns([3, 1])
         
@@ -465,7 +465,6 @@ elif menu == "🛒 Update Harga BB":
         
         with c_up2:
             st.write("**Belum Punya Format?**")
-            # Membuat Template Excel Kosong Sesuai Format
             df_template = pd.DataFrame([{
                 "KODE SUPPLIER": "SUP-001",
                 "NAMA SUPPLIER": "PT Contoh Supplier",
@@ -488,26 +487,39 @@ elif menu == "🛒 Update Harga BB":
                 use_container_width=True
             )
 
-        # Proses File Upload
+        # PROSES & MENAMPILKAN TABEL ISI FILE SECARA LANGSUNG (PREVIEW)
         if uploaded_bb_file is not None:
             try:
                 if uploaded_bb_file.name.endswith('.csv'):
-                    df_up = pd.read_csv(uploaded_bb_file)
+                    try:
+                        df_up = pd.read_csv(uploaded_bb_file, sep=',')
+                        if len(df_up.columns) == 1:
+                            uploaded_bb_file.seek(0)
+                            df_up = pd.read_csv(uploaded_bb_file, sep=';')
+                    except Exception:
+                        uploaded_bb_file.seek(0)
+                        df_up = pd.read_csv(uploaded_bb_file, sep=';')
                 else:
                     df_up = pd.read_excel(uploaded_bb_file)
 
-                # Standarisasi Nama Kolom
-                df_up.columns = [str(c).strip().upper() for c in df_up.columns]
+                st.success(f"✅ File **{uploaded_bb_file.name}** berhasil dimuat! Ditemukan **{len(df_up)}** baris data:")
+                
+                # PREVIEW TABEL UNTUK USER
+                st.markdown("##### 📄 Preview Tabel Data dari File Upload:")
+                st.dataframe(df_up, use_container_width=True, height=280)
+
+                # Mapping Kolom Otomatis
+                cols_upper = {str(c).strip().upper(): c for c in df_up.columns}
                 
                 mapped_bb = pd.DataFrame()
                 
-                c_ksup = next((c for c in df_up.columns if 'KODE' in c and 'SUP' in c), None)
-                c_nsup = next((c for c in df_up.columns if 'NAMA' in c and 'SUP' in c), None)
-                c_nbb  = next((c for c in df_up.columns if 'BB' in c or 'ITEM' in c or 'BARANG' in c or 'BAHAN' in c), None)
-                c_hrg  = next((c for c in df_up.columns if 'HARGA' in c or 'PRICE' in c), None)
-                c_sat  = next((c for c in df_up.columns if 'SATUAN' in c or 'UNIT' in c), None)
-                c_kat  = next((c for c in df_up.columns if 'KAT' in c), None)
-                c_cat  = next((c for c in df_up.columns if 'CATATAN' in c or 'KET' in c or 'MEREK' in c), None)
+                c_ksup = next((orig for up, orig in cols_upper.items() if 'KODE' in up and 'SUP' in up), None)
+                c_nsup = next((orig for up, orig in cols_upper.items() if 'NAMA' in up and 'SUP' in up), None)
+                c_nbb  = next((orig for up, orig in cols_upper.items() if 'BB' in up or 'ITEM' in up or 'BARANG' in up or 'BAHAN' in up), None)
+                c_hrg  = next((orig for up, orig in cols_upper.items() if 'HARGA' in up or 'PRICE' in up), None)
+                c_sat  = next((orig for up, orig in cols_upper.items() if 'SATUAN' in up or 'UNIT' in up), None)
+                c_kat  = next((orig for up, orig in cols_upper.items() if 'KAT' in up), None)
+                c_cat  = next((orig for up, orig in cols_upper.items() if 'CATATAN' in up or 'KET' in up or 'MEREK' in up), None)
 
                 mapped_bb["KODE SUPPLIER"] = df_up[c_ksup].astype(str) if c_ksup else "SUP-EXT"
                 mapped_bb["NAMA SUPPLIER"] = df_up[c_nsup].astype(str) if c_nsup else "Supplier External"
@@ -517,19 +529,24 @@ elif menu == "🛒 Update Harga BB":
                 mapped_bb["KATEGORI"] = df_up[c_kat].astype(str) if c_kat else "Sembako"
                 mapped_bb["CATATAN"] = df_up[c_cat].astype(str) if c_cat else "-"
 
-                mode_append = st.radio("Opsi Impor:", ["Gabungkan dengan Data Lama (Append)", "Ganti Seluruh Data (Replace)"], horizontal=True)
-                
-                if st.button("🚀 Proses & Simpan Data Upload", type="primary"):
-                    if mode_append == "Replace":
-                        st.session_state["df_harga_bb"] = mapped_bb
-                    else:
-                        st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], mapped_bb], ignore_index=True)
-                    
-                    st.success(f"✅ Berhasil memuat {len(mapped_bb)} item bahan baku!")
-                    st.rerun()
+                st.markdown("---")
+                c_opt1, c_opt2 = st.columns([2, 1])
+                with c_opt1:
+                    mode_append = st.radio("Metode Impor ke Sistem:", ["Gabungkan dengan Data Lama (Append)", "Ganti Seluruh Data (Replace)"], horizontal=True)
+                with c_opt2:
+                    st.write("")
+                    if st.button("🚀 Simpan Tabel Ini ke Sistem", type="primary", use_container_width=True):
+                        if "Replace" in mode_append:
+                            st.session_state["df_harga_bb"] = mapped_bb
+                        else:
+                            st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], mapped_bb], ignore_index=True)
+                        
+                        st.balloons()
+                        st.success(f"✅ Berhasil menyimpan {len(mapped_bb)} item ke database sistem!")
+                        st.rerun()
 
             except Exception as e:
-                st.error(f"Gagal memproses file upload: {e}")
+                st.error(f"❌ Gagal membaca tabel dari file upload: {e}")
 
     st.markdown("---")
 
@@ -551,7 +568,6 @@ elif menu == "🛒 Update Harga BB":
     with col_dl:
         st.write("")
         st.write("")
-        # Menyiapkan buffer Excel khusus sheet Update Harga BB
         output_harga = io.BytesIO()
         with pd.ExcelWriter(output_harga, engine='openpyxl') as writer:
             df_harga.to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
@@ -627,7 +643,7 @@ elif menu == "🛒 Update Harga BB":
                 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL 2: KELOLA DATA DAPUR SPPG
+# MODUL 3: KELOLA DATA DAPUR SPPG
 # ---------------------------------------------------------
 elif menu == "🏬 Kelola Data Dapur":
     st.subheader("🏬 Manajemen Data Dapur SPPG & Peta Sebaran")
@@ -690,71 +706,7 @@ elif menu == "🏬 Kelola Data Dapur":
                 st.markdown("</div>", unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# MODUL 3: DATA SUPPLIER & EXPORT/IMPORT
-# ---------------------------------------------------------
-elif menu == "🤝 Data Supplier & Link Form":
-    st.subheader("🤝 Kelola Data Supplier & Link Web App")
-    
-    with st.expander("📂 **Upload Data Supplier dari File Excel / Google Sheets**", expanded=True):
-        uploaded_file = st.file_uploader("Pilih file Excel Supplier:", type=["xlsx", "xls", "xlsb", "csv"])
-        
-        if uploaded_file is not None:
-            try:
-                if uploaded_file.name.endswith('.csv'):
-                    df_upload = pd.read_csv(uploaded_file)
-                else:
-                    df_upload = pd.read_excel(uploaded_file)
-                
-                df_upload.columns = [str(c).strip() for c in df_upload.columns]
-                mapped_df = pd.DataFrame()
-                
-                col_code = next((c for c in df_upload.columns if 'SUPP CODE' in c.upper() or 'KODE' in c.upper()), None)
-                mapped_df["KODE SUPPLIER"] = df_upload[col_code].astype(str) if col_code else [f"SUP-{i+1:03d}" for i in range(len(df_upload))]
-                
-                col_name = next((c for c in df_upload.columns if 'SUPPLIER NAME' in c.upper() or 'NAMA' in c.upper()), None)
-                mapped_df["NAMA SUPPLIER"] = df_upload[col_name].astype(str) if col_name else "Tanpa Nama"
-                
-                col_phone = next((c for c in df_upload.columns if 'PHONE' in c.upper() or 'WA' in c.upper() or 'TELP' in c.upper()), None)
-                if col_phone:
-                    def clean_phone(p):
-                        p_str = str(p).replace("-", "").replace(" ", "").replace("+", "").split(".")[0].strip()
-                        if p_str.startswith("0"): return "62" + p_str[1:]
-                        elif not p_str.startswith("62") and len(p_str) > 5: return "62" + p_str
-                        return p_str
-                    mapped_df["NO WA"] = df_upload[col_phone].apply(clean_phone)
-                else:
-                    mapped_df["NO WA"] = "6285169796974"
-
-                mapped_df["JENIS BB 1"] = "-"
-                mapped_df["TOKEN"] = [buat_token() for _ in range(len(mapped_df))]
-                mapped_df["LINK FORM"] = mapped_df["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}")
-
-                st.session_state["df_supplier_state"] = mapped_df
-                st.success(f"✅ Berhasil memuat {len(mapped_df)} data supplier!")
-                st.rerun()
-            except Exception as e:
-                st.error(f"Gagal memproses file: {e}")
-
-    st.markdown("---")
-    st.dataframe(st.session_state["df_supplier_state"], use_container_width=True)
-
-    # Export Data Button
-    output = io.BytesIO()
-    with pd.ExcelWriter(output) as writer:
-        st.session_state["df_harga_bb"].to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
-        st.session_state["df_supplier_state"].to_excel(writer, index=False, sheet_name='Supplier Link')
-        st.session_state["df_dapur_state"].to_excel(writer, index=False, sheet_name='Data Dapur')
-    
-    st.download_button(
-        label="📥 Download Seluruh Data System (Excel Multi-Sheet)",
-        data=output.getvalue(),
-        file_name="Master_Data_Procurement_System.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        use_container_width=True
-    )
-
-# ---------------------------------------------------------
-# MODUL LAINNYA
+# MODUL LAINNYA (PLACEHOLDER DEFAULTS)
 # ---------------------------------------------------------
 else:
-    st.info(f"Modul `{menu}` siap digunakan.")
+    st.info(f"Modul **{menu}** siap dikembangkan lebih lanjut sesuai kebutuhan operasional Koperasi YK.")
