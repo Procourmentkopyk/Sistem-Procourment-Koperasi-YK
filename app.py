@@ -5,6 +5,7 @@ import io
 import os
 import random
 import string
+import urllib.parse
 
 # ---------------------------------------------------------
 # KONFIGURASI HALAMAN & UTILITY
@@ -138,8 +139,95 @@ if "df_supplier_state" not in st.session_state:
 # 3. State Harga BB
 if "df_harga_bb" not in st.session_state:
     st.session_state["df_harga_bb"] = pd.DataFrame(columns=[
-        "KODE SUPPLIER", "NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "SATUAN"
+        "KODE SUPPLIER", "NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "SATUAN", "KATEGORI", "CATATAN"
     ])
+
+# ---------------------------------------------------------
+# HANDLER LINK SUPPLIER (FORM EXTERNAL VENDOR)
+# ---------------------------------------------------------
+query_params = st.query_params
+
+if "token" in query_params:
+    token_diterima = query_params["token"]
+    kategori_diterima = query_params.get("kat", "ALL")
+    
+    # Cari data supplier berdasarkan token
+    df_sup = st.session_state.get("df_supplier_state", pd.DataFrame())
+    supplier_info = None
+    
+    if not df_sup.empty and "TOKEN" in df_sup.columns:
+        match = df_sup[df_sup["TOKEN"] == token_diterima]
+        if not match.empty:
+            supplier_info = match.iloc[0]
+
+    # --- TAMPILAN HALAMAN FORM SUPPLIER ---
+    st.title("📝 Form Penawaran Harga Supplier")
+    st.caption("Koperasi YK — Sistem Informasi Procurement & SPPG")
+    st.markdown("---")
+
+    if supplier_info is not None:
+        st.success(f"Selamat datang, **{supplier_info['NAMA SUPPLIER']}**!")
+    else:
+        st.info("Form Penawaran Harga Barang Operasional")
+
+    # Parsing Kategori yang diizinkan
+    if kategori_diterima != "ALL":
+        list_kat_supplier = [k.replace("_", " ") for k in kategori_diterima.split(",")]
+        st.write("Kategori Barang yang Ditawarkan:")
+        st.write(" ".join([f"`{k}`" for k in list_kat_supplier]))
+    else:
+        list_kat_supplier = ["Semua Kategori"]
+        st.write("Kategori Barang: **Semua Kategori**")
+
+    st.markdown("---")
+
+    # --- FORM INPUT HARGA SUPPLIER ---
+    with st.form("form_input_harga_supplier"):
+        st.subheader("🛒 Input Penawaran Harga")
+        
+        nama_barang = st.text_input("Nama Bahan Baku / Barang", placeholder="Contoh: Telur Ayam Ras / Minyak Goreng")
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            harga_penawaran = st.number_input("Harga Penawaran (Rp)", min_value=0, step=500, value=10000)
+            satuan = st.selectbox("Satuan", ["Kg", "Liter", "Ikat", "Pcs", "Karton", "Ekor", "Pack"])
+        with c2:
+            kategori_pilihan = st.selectbox(
+                "Kategori Barang", 
+                options=list_kat_supplier if list_kat_supplier != ["Semua Kategori"] else [
+                    "Ayam", "Beras", "Buah", "Cookies", "Daging", "Ikan", 
+                    "Keju", "Olahan", "Sayur", "Sembako", "Susu", "Tahu", 
+                    "Tempe", "Telur Ayam", "Telur Bebek", "Telur Puyuh"
+                ]
+            )
+            catatan = st.text_input("Catatan / Merek (Opsional)", placeholder="Contoh: Ukuran Medium, Fresh")
+
+        submit_harga = st.form_submit_button("🚀 Kirim Penawaran Harga", use_container_width=True)
+
+        if submit_harga:
+            if nama_barang.strip() == "":
+                st.error("Mohon isi nama barang terlebih dahulu.")
+            else:
+                kode_sup = supplier_info["KODE SUPPLIER"] if supplier_info is not None else "GUEST"
+                nama_sup = supplier_info["NAMA SUPPLIER"] if supplier_info is not None else "Supplier External"
+
+                # Simpan ke session state df_harga_bb
+                new_entry = pd.DataFrame([{
+                    "KODE SUPPLIER": kode_sup,
+                    "NAMA SUPPLIER": nama_sup,
+                    "NAMA BB": nama_barang,
+                    "HARGA PER SATUAN": harga_penawaran,
+                    "SATUAN": satuan,
+                    "KATEGORI": kategori_pilihan,
+                    "CATATAN": catatan
+                }])
+
+                st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], new_entry], ignore_index=True)
+                st.balloons()
+                st.success(f"Berhasil! Penawaran untuk **{nama_barang}** seharga **Rp {harga_penawaran:,}** telah tersimpan.")
+
+    # Stop eksekusi agar vendor tidak bisa melihat sidebar internal admin
+    st.stop()
 
 # ---------------------------------------------------------
 # DIALOGS / POP-UP DAPUR
@@ -260,7 +348,6 @@ st.markdown(f"""
 </div>
 """, unsafe_allow_html=True)
 
-
 # ---------------------------------------------------------
 # MODUL 1: DASHBOARD & HET
 # ---------------------------------------------------------
@@ -271,7 +358,6 @@ if menu == "📊 Dashboard & HET":
     m2.metric("Total Supplier", len(st.session_state["df_supplier_state"]), delta="Terdaftar")
     m3.metric("Kategori Barang", "6 Kategori", delta="Lengkap")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
-
 
 # ---------------------------------------------------------
 # MODUL 2: KELOLA DATA DAPUR SPPG
@@ -352,7 +438,6 @@ elif menu == "🏬 Kelola Data Dapur":
                 st.markdown("</div>", unsafe_allow_html=True)
     else:
         st.info("Belum ada data dapur. Klik 'Tambah Dapur Baru' untuk menambahkan.")
-
 
 # ---------------------------------------------------------
 # MODUL 3: KELOLA DATA SUPPLIER & LINK WEB APP
@@ -481,13 +566,10 @@ elif menu == "🤝 Data Supplier & Link Form":
     else:
         st.info("Belum ada data supplier. Silakan upload file Excel di atas.")
 
-
 # ---------------------------------------------------------
-# MODUL 4: WA & PO GENERATOR (FIXED EDIT PESAN & LINK ERROR)
+# MODUL 4: WA & PO GENERATOR
 # ---------------------------------------------------------
 elif menu == "💬 WA & PO Generator":
-    import urllib.parse
-
     st.subheader("💬 WA Message & PO Link Generator")
     st.caption("Kelola kategori barang yang disuplai oleh masing-masing vendor dan buat draft pesan WhatsApp beserta link penawaran harganya.")
 
@@ -577,7 +659,7 @@ elif menu == "💬 WA & PO Generator":
 
         col_wa1, col_wa2 = st.columns([1, 1])
         with col_wa1:
-            # Menggunakan pesan_edited (hasil editan user) bukan default_pesan
+            # Menggunakan pesan_edited (hasil editan user)
             encoded_msg = urllib.parse.quote(pesan_edited)
             wa_url = f"https://wa.me/{no_wa}?text={encoded_msg}"
             
