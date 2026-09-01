@@ -6,7 +6,7 @@ elif menu == "🤝 Data Supplier & Link Form":
     
     # --- FITUR UPLOAD FILE EXCEL / SPREADSHEET ---
     with st.expander("📂 **Upload Data Supplier dari File Excel / Google Sheets**", expanded=True):
-        st.write("Unggah file `.xlsx`, `.xls`, atau `.xlsb` yang berisi daftar supplier kamu.")
+        st.write("Unggah file `.xlsx`, `.xls`, atau `.csv` yang berisi daftar supplier kamu.")
         uploaded_file = st.file_uploader("Pilih file Excel Supplier:", type=["xlsx", "xls", "xlsb", "csv"])
         
         if uploaded_file is not None:
@@ -17,7 +17,7 @@ elif menu == "🤝 Data Supplier & Link Form":
                 else:
                     df_upload = pd.read_excel(uploaded_file)
                 
-                # Deteksi baris header jika terdapat judul/empty row di atasnya
+                # Deteksi baris header jika terdapat judul/empty row di atasnya (seperti baris 3-4 di Google Sheets)
                 if "Supp Code" not in df_upload.columns and "Supplier Name" not in df_upload.columns:
                     for i in range(min(10, len(df_upload))):
                         row_vals = df_upload.iloc[i].astype(str).tolist()
@@ -26,10 +26,10 @@ elif menu == "🤝 Data Supplier & Link Form":
                             df_upload = df_upload.iloc[i+1:].reset_index(drop=True)
                             break
 
-                # Cleaning nama kolom
+                # Cleaning nama kolom (hapus spasi berlebih)
                 df_upload.columns = [str(c).strip() for c in df_upload.columns]
                 
-                # Mapping Nama Kolom dari Spreadsheet ke Format Sistem
+                # Pemetaan/Mapping Nama Kolom dari Spreadsheet ke Format Sistem
                 mapped_df = pd.DataFrame()
                 
                 # 1. Kode Supplier
@@ -40,7 +40,7 @@ elif menu == "🤝 Data Supplier & Link Form":
                 col_name = next((c for c in df_upload.columns if 'SUPPLIER NAME' in c.upper() or 'NAMA' in c.upper()), None)
                 mapped_df["NAMA SUPPLIER"] = df_upload[col_name].astype(str) if col_name else "Tanpa Nama"
                 
-                # 3. Nomor WA / Phone (Format otomatis ke 628xxx)
+                # 3. Nomor WA / Phone (Auto-format ke format 628xxx)
                 col_phone = next((c for c in df_upload.columns if 'PHONE' in c.upper() or 'WA' in c.upper() or 'TELP' in c.upper()), None)
                 if col_phone:
                     def clean_phone(p):
@@ -64,14 +64,14 @@ elif menu == "🤝 Data Supplier & Link Form":
                 mapped_df["TOKEN"] = [buat_token() for _ in range(len(mapped_df))]
                 mapped_df["LINK FORM"] = mapped_df["TOKEN"].apply(lambda t: f"{WEB_APP_URL}?token={t}")
 
-                # Kolom Tambahan (Alamat, PIC, Lat, Long)
+                # Kolom Tambahan (PIC & Alamat jika ada)
                 col_pic = next((c for c in df_upload.columns if 'PIC' in c.upper()), None)
-                if col_pic: mapped_df["PIC"] = df_upload[col_pic]
+                mapped_df["PIC"] = df_upload[col_pic].astype(str) if col_pic else "-"
                 
                 col_alamat = next((c for c in df_upload.columns if 'ALAMAT' in c.upper()), None)
-                if col_alamat: mapped_df["ALAMAT"] = df_upload[col_alamat]
+                mapped_df["ALAMAT"] = df_upload[col_alamat].astype(str) if col_alamat else "-"
 
-                # Drop baris kosong
+                # Menghapus baris yang kosong/nan
                 mapped_df = mapped_df.dropna(subset=["NAMA SUPPLIER"]).reset_index(drop=True)
 
                 st.success(f"✅ Berhasil membaca **{len(mapped_df)} data supplier** dari file!")
@@ -94,7 +94,7 @@ elif menu == "🤝 Data Supplier & Link Form":
 
     st.markdown("---")
 
-    # --- TOMBOL AKSI & EXPORT ---
+    # --- TOMBOL AKSI & EXPORT DATA ---
     col1, col2 = st.columns([1, 2])
     with col1:
         if st.button("➕ Tambah Supplier Manual", type="primary", use_container_width=True):
