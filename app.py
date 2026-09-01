@@ -463,7 +463,210 @@ elif menu == "🤝 Data Supplier & Link Form":
     )
 
 # ---------------------------------------------------------
-# MODUL LAINNYA
+# MODUL 4: WA & PO GENERATOR
 # ---------------------------------------------------------
-else:
-    st.info(f"Modul `{menu}` siap digunakan.")
+elif menu == "💬 WA & PO Generator":
+
+    st.subheader("💬 WhatsApp Generator - Update Penawaran Harga Supplier")
+
+    df_supplier = st.session_state["df_supplier_state"].copy()
+
+    if df_supplier.empty:
+        st.warning("⚠️ Data supplier masih kosong. Silakan upload data supplier terlebih dahulu.")
+
+    else:
+
+        # =====================================================
+        # TEMPLATE PESAN
+        # =====================================================
+
+        st.markdown("### 📝 Template Pesan WhatsApp")
+
+        template_default = """Halo Bapak/Ibu {nama_supplier} 👋
+
+Kami dari *Koperasi YK - Procurement SPPG*.
+
+Mohon bantuan untuk melakukan update penawaran harga bahan baku yang Bapak/Ibu supply.
+
+Silakan isi melalui link berikut:
+
+{link_form}
+
+Mohon harga dapat diperbarui sesuai harga terbaru.
+
+Terima kasih atas kerja samanya 🙏
+
+*Koperasi YK*
+Sistem Procurement SPPG"""
+
+        template_pesan = st.text_area(
+            "Edit Template Pesan",
+            value=template_default,
+            height=300,
+            help="Gunakan {nama_supplier} untuk nama supplier dan {link_form} untuk link penawaran."
+        )
+
+        st.markdown("---")
+
+        # =====================================================
+        # FILTER SUPPLIER
+        # =====================================================
+
+        st.markdown("### 🎯 Pilih Supplier")
+
+        col1, col2 = st.columns([2, 1])
+
+        with col1:
+            list_supplier = df_supplier["NAMA SUPPLIER"].dropna().tolist()
+
+            selected_supplier = st.multiselect(
+                "Pilih Supplier yang akan dikirim",
+                options=list_supplier,
+                default=list_supplier
+            )
+
+        with col2:
+            st.metric(
+                "Supplier Dipilih",
+                len(selected_supplier)
+            )
+
+        st.markdown("---")
+
+        # =====================================================
+        # TABEL GENERATOR WA
+        # =====================================================
+
+        st.markdown("### 📱 Kirim Link Penawaran Harga")
+
+        df_selected = df_supplier[
+            df_supplier["NAMA SUPPLIER"].isin(selected_supplier)
+        ].copy()
+
+        if df_selected.empty:
+            st.info("Pilih minimal satu supplier.")
+
+        else:
+
+            # Header
+            h1, h2, h3, h4, h5 = st.columns([1, 2.5, 1.5, 3, 1])
+
+            h1.markdown("**NO**")
+            h2.markdown("**SUPPLIER**")
+            h3.markdown("**NO WA**")
+            h4.markdown("**LINK FORM**")
+            h5.markdown("**KIRIM**")
+
+            st.markdown("---")
+
+            # Loop Supplier
+            for idx, row in df_selected.iterrows():
+
+                nomor = row.get("NO WA", "")
+                nama = row.get("NAMA SUPPLIER", "")
+                link = row.get("LINK FORM", "")
+
+                # Generate pesan
+                pesan = template_pesan.format(
+                    nama_supplier=nama,
+                    link_form=link
+                )
+
+                # Encode WhatsApp
+                pesan_encoded = urllib.parse.quote(pesan)
+
+                wa_link = f"https://wa.me/{nomor}?text={pesan_encoded}"
+
+                c1, c2, c3, c4, c5 = st.columns(
+                    [1, 2.5, 1.5, 3, 1]
+                )
+
+                c1.write(idx + 1)
+
+                c2.write(nama)
+
+                c3.write(nomor)
+
+                c4.code(
+                    link,
+                    language=None
+                )
+
+                c5.link_button(
+                    "💬 WA",
+                    wa_link,
+                    use_container_width=True
+                )
+
+        st.markdown("---")
+
+        # =====================================================
+        # PREVIEW PESAN
+        # =====================================================
+
+        st.markdown("### 👀 Preview Pesan")
+
+        if not df_selected.empty:
+
+            preview_supplier = st.selectbox(
+                "Pilih supplier untuk preview",
+                df_selected["NAMA SUPPLIER"].tolist()
+            )
+
+            preview_row = df_selected[
+                df_selected["NAMA SUPPLIER"] == preview_supplier
+            ].iloc[0]
+
+            preview_message = template_pesan.format(
+                nama_supplier=preview_row["NAMA SUPPLIER"],
+                link_form=preview_row["LINK FORM"]
+            )
+
+            st.info(preview_message)
+
+
+# ---------------------------------------------------------
+# MODUL 5: MATRIKS JARAK
+# ---------------------------------------------------------
+elif menu == "🚛 Matriks Jarak":
+
+    st.subheader("🚛 Matriks Jarak Supplier ke Dapur")
+
+    st.info("""
+    Modul ini nantinya akan menghitung:
+
+    • Jarak Supplier → Dapur  
+    • Supplier terdekat per dapur  
+    • Ranking jarak  
+    • Estimasi biaya logistik  
+    """)
+
+
+# ---------------------------------------------------------
+# MODUL 6: SCORING & EVALUASI
+# ---------------------------------------------------------
+elif menu == "🎯 Scoring & Evaluasi":
+
+    st.subheader("🎯 Supplier Scoring & Evaluation")
+
+    st.info("""
+    Sistem evaluasi akan menggunakan beberapa parameter:
+
+    💰 Harga
+    🚛 Jarak
+    📦 Coverage Item
+    ⭐ Rating Supplier
+    ⏱ Ketepatan Pengiriman
+
+    Semua parameter akan digabung menjadi Supplier Score.
+    """)
+
+
+# ---------------------------------------------------------
+# MODUL 7: HET & KOMPARASI PASAR
+# ---------------------------------------------------------
+elif menu == "📈 HET & Komparasi Pasar":
+
+    st.subheader("📈 HET & Komparasi Harga Pasar")
+
+    st.info("Modul monitoring HET dan harga pasar sedang disiapkan.")
