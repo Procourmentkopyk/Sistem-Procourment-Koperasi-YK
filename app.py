@@ -642,14 +642,10 @@ elif menu == "💬 WA & PO Generator":
         # Template default
         default_pesan = (
             f"Halo *{nama_supplier}*,\n\n"
-            f"Sehubungan dengan proses pembuatan PO dapur yang di majukan di hari kamis, bersama ini Barlian kirimkan pengisian link penawaran harga untuk pengadaan barang koperasi BUM ASSA periode 31 Ags 7-11 Sept 2026. "
+            f"Kami dari tim Procurement Koperasi YK/SPPG. "
+            f"Mohon untuk mengisi update harga penawaran harian/mingguan untuk kategori *[{kategori_txt}]* "
+            f"melalui link form resmi berikut ini:\n\n"
             f"🔗 {link_form_khusus}\n\n"
-            f"Untuk cara pengisian :"
-            f"1. klik link diatas (bisa menggunakan hp atau laptop dg koneksi internet)."
-            f"2. isi kolom harga hanya dengan angka (tanpa tanda baca) sesuai item bahan."
-            f"3. klik simpan penawaran (akan muncul notif berhasil menyimpan data)"
-            f"4. silahkan konfirmasi dengan chat wa "update oke" apabila sudah mengisi form penawaran harga."
-            f"mengingat penggunaan update harga penawaran tersebut akan digunakan untuk pembuatan PO supplier di hari rabu-kamis, barlian mohon supaya dapat di isi maksimal besok (rabu) jam 18:00 malam"
             f"Terima kasih atas kerja samanya."
         )
 
