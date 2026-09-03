@@ -18,11 +18,12 @@ st.set_page_config(
 )
 
 WEB_APP_URL = "https://sistem-procurement-koperasi-yk.streamlit.app"
+DATA_HARGA_FILE = "Data_Penawaran_Supplier_Master.csv"  # File penyimpan permanen data penawaran harga
 
 def buat_token(length=32):
     return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
 
-# Custom CSS untuk Table Styling
+# Custom CSS untuk Table Styling & Header
 st.markdown("""
 <style>
     .header-card {
@@ -59,7 +60,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------
-# FUNCTION LOAD DATA EXCEL / XLSB
+# FUNCTION LOAD & SAVE DATA PERMANEN
 # ---------------------------------------------------------
 @st.cache_data
 def load_data():
@@ -80,6 +81,19 @@ def load_data():
     return None, "File data tidak ditemukan."
 
 data_excel, file_status = load_data()
+
+# Helper Penyimpanan Permanen Data Penawaran Supplier
+def load_penawaran_permanen():
+    if os.path.exists(DATA_HARGA_FILE):
+        return pd.read_csv(DATA_HARGA_FILE)
+    return pd.DataFrame(columns=["KODE SUPPLIER", "NAMA SUPPLIER", "P/N", "JENIS BB", "ITEM BB", "SATUAN", "HARGA PENAWARAN", "CATATAN"])
+
+def save_penawaran_permanen(df_new_data):
+    df_existing = load_penawaran_permanen()
+    df_combined = pd.concat([df_existing, df_new_data], ignore_index=True)
+    df_combined = df_combined.drop_duplicates(subset=["KODE SUPPLIER", "ITEM BB"], keep="last")
+    df_combined.to_csv(DATA_HARGA_FILE, index=False)
+    return df_combined
 
 # ---------------------------------------------------------
 # INITIALIZE SESSION STATES
@@ -126,18 +140,23 @@ if "df_supplier_state" not in st.session_state:
         "TOKEN", "LINK FORM", "PIC", "ALAMAT"
     ])
 
-# 3. State Harga BB / Penawaran
-if "df_harga_bb" not in st.session_state:
-    st.session_state["df_harga_bb"] = pd.DataFrame(columns=[
-        "KODE SUPPLIER", "NAMA SUPPLIER", "NAMA BB", "HARGA PER SATUAN", "SATUAN", "KATEGORI", "CATATAN"
-    ])
-
-# 4. State Master Bahan Baku
+# 3. State Master Bahan Baku (525 Master Item)
 if "df_bb_state" not in st.session_state:
-    st.session_state["df_bb_state"] = pd.DataFrame(columns=["P/N", "JENIS BB", "ITEM BB", "SATUAN"])
+    if data_excel and isinstance(data_excel, dict) and "Master Bahan Baku" in data_excel:
+        st.session_state["df_bb_state"] = data_excel["Master Bahan Baku"].copy()
+    else:
+        st.session_state["df_bb_state"] = pd.DataFrame({
+            "P/N": [f"BB-{i+1:03d}" for i in range(10)],
+            "JENIS BB": ["Ayam", "Beras", "Sayur", "Sembako", "Telur Ayam", "Daging", "Ikan", "Bumbu", "Susu", "Buah"],
+            "ITEM BB": ["Ayam Broiler Utuh", "Beras C4 Super", "Bayam Fresh", "Minyak Goreng 2L", "Telur Ayam Ras", "Daging Sapi Dadu", "Ikan Gurame", "Bawang Merah", "Susu UHT 1L", "Pisang Ambon"],
+            "SATUAN": ["Kg", "Kg", "Ikat", "Pcs", "Kg", "Kg", "Kg", "Kg", "Karton", "Sisir"]
+        })
+
+# 4. State Harga BB / Penawaran Supplier (Di-load dari CSV Permanen)
+st.session_state["df_harga_bb"] = load_penawaran_permanen()
 
 # ---------------------------------------------------------
-# MODE VENDOR EXTERNAL (JIKA DIBUKA DENGAN TOKEN VIA URL)
+# MODE VENDOR EXTERNAL (PENGISIAN SPREADSHEET VIA TOKEN LINK)
 # ---------------------------------------------------------
 query_params = st.query_params
 if "token" in query_params:
@@ -152,66 +171,132 @@ if "token" in query_params:
         if not match.empty:
             supplier_info = match.iloc[0]
 
-    st.title("📝 Form Penawaran Harga Supplier")
+    st.title("📝 Portal Penawaran Harga Bahan Baku")
     st.caption("Koperasi YK — Sistem Informasi Procurement & SPPG")
     st.markdown("---")
 
     if supplier_info is not None:
-        st.success(f"Selamat datang, **{supplier_info['NAMA SUPPLIER']}**!")
+        st.success(f"Selamat datang, **{supplier_info['NAMA SUPPLIER']}** (Kode: `{supplier_info['KODE SUPPLIER']}`)!")
+        kode_sup = supplier_info['KODE SUPPLIER']
+        nama_sup = supplier_info['NAMA SUPPLIER']
     else:
-        st.info("Form Penawaran Harga Barang Operasional")
+        st.info("Form Penawaran Harga Barang Operasional — Mode Akses Vendor External")
+        kode_sup = "GUEST"
+        nama_sup = "Supplier External"
 
-    if kategori_diterima != "ALL":
-        list_kat_supplier = [k.replace("_", " ") for k in kategori_diterima.split(",")]
-        st.write("Kategori Barang yang Ditawarkan:")
-        st.write(" ".join([f"`{k}`" for k in list_kat_supplier]))
-    else:
-        list_kat_supplier = ["Semua Kategori"]
-        st.write("Kategori Barang: **Semua Kategori**")
+    # Tab 1: Spreadsheet Interaktif (Untuk BANYAK Bahan Baku)
+    # Tab 2: Form Manual Singkat (Untuk 1 Bahan Baku Khusus / Luar Master)
+    tab_bulk, tab_single = st.tabs(["📊 Update Spreadsheet Massal (Rekomendasi)", "✏️ Input Manual Satuan"])
 
-    st.markdown("---")
-
-    with st.form("form_input_harga_supplier"):
-        st.subheader("🛒 Input Penawaran Harga")
-        nama_barang = st.text_input("Nama Bahan Baku / Barang", placeholder="Contoh: Telur Ayam Ras / Minyak Goreng")
+    with tab_bulk:
+        st.markdown("##### 💡 Petunjuk Pengisian Massal:")
+        st.caption("1. Gunakan filter pencarian/kategori di bawah untuk menemukan bahan baku yang Anda suplai.\n2. Klik dua kali pada kolom **HARGA PENAWARAN (RP)** untuk mengetikkan harga.\n3. Klik tombol **Simpan Semua Penawaran** di bagian bawah setelah selesai.")
         
-        c1, c2 = st.columns(2)
-        with c1:
-            harga_penawaran = st.number_input("Harga Penawaran (Rp)", min_value=0, step=500, value=10000)
-            satuan = st.selectbox("Satuan", ["Kg", "Liter", "Ikat", "Pcs", "Karton", "Ekor", "Pack"])
-        with c2:
-            kategori_pilihan = st.selectbox(
-                "Kategori Barang", 
-                options=list_kat_supplier if list_kat_supplier != ["Semua Kategori"] else [
-                    "Ayam", "Beras", "Buah", "Cookies", "Daging", "Ikan", 
-                    "Keju", "Olahan", "Sayur", "Sembako", "Susu", "Tahu", 
-                    "Tempe", "Telur Ayam", "Telur Bebek", "Telur Puyuh"
-                ]
-            )
-            catatan = st.text_input("Catatan / Merek (Opsional)", placeholder="Contoh: Ukuran Medium, Fresh")
+        df_master_bb = st.session_state["df_bb_state"].copy()
+        df_existing_harga = st.session_state["df_harga_bb"]
+        df_existing_sup = df_existing_harga[df_existing_harga["KODE SUPPLIER"] == kode_sup] if not df_existing_harga.empty else pd.DataFrame()
 
-        submit_harga = st.form_submit_button("🚀 Kirim Penawaran Harga", use_container_width=True)
+        if not df_existing_sup.empty:
+            df_merged = pd.merge(df_master_bb, df_existing_sup[["ITEM BB", "HARGA PENAWARAN", "CATATAN"]], on="ITEM BB", how="left")
+        else:
+            df_merged = df_master_bb.copy()
+            df_merged["HARGA PENAWARAN"] = 0
+            df_merged["CATATAN"] = ""
 
-        if submit_harga:
-            if nama_barang.strip() == "":
-                st.error("Mohon isi nama barang terlebih dahulu.")
+        df_merged["HARGA PENAWARAN"] = df_merged["HARGA PENAWARAN"].fillna(0).astype(int)
+        df_merged["CATATAN"] = df_merged["CATATAN"].fillna("")
+
+        col_f1, col_f2 = st.columns([1, 2])
+        with col_f1:
+            kat_list = ["Semua Kategori"] + list(df_merged["JENIS BB"].dropna().unique())
+            sel_kat = st.selectbox("Filter Kategori Barang:", kat_list)
+        with col_f2:
+            search_item = st.text_input("🔍 Cari Nama Bahan Baku:", placeholder="Contoh: Telur, Minyak, Ayam...")
+
+        df_disp = df_merged.copy()
+        if sel_kat != "Semua Kategori":
+            df_disp = df_disp[df_disp["JENIS BB"] == sel_kat]
+        if search_item:
+            df_disp = df_disp[df_disp["ITEM BB"].str.contains(search_item, case=False, na=False)]
+
+        edited_df = st.data_editor(
+            df_disp[["P/N", "JENIS BB", "ITEM BB", "SATUAN", "HARGA PENAWARAN", "CATATAN"]],
+            column_config={
+                "P/N": st.column_config.TextColumn("Kode P/N", disabled=True),
+                "JENIS BB": st.column_config.TextColumn("Kategori", disabled=True),
+                "ITEM BB": st.column_config.TextColumn("Nama Bahan Baku", disabled=True),
+                "SATUAN": st.column_config.TextColumn("Satuan", disabled=True),
+                "HARGA PENAWARAN": st.column_config.NumberColumn(
+                    "Harga Penawaran (Rp)",
+                    help="Masukkan nominal harga tanpa titik",
+                    min_value=0,
+                    step=500,
+                    format="Rp %d"
+                ),
+                "CATATAN": st.column_config.TextColumn("Catatan / Merek (Opsional)")
+            },
+            disabled=["P/N", "JENIS BB", "ITEM BB", "SATUAN"],
+            hide_index=True,
+            use_container_width=True,
+            num_rows="fixed",
+            height=450
+        )
+
+        if st.button("🚀 SIMPAN SEMUA PENAWARAN HARGA", type="primary", use_container_width=True):
+            df_valid = edited_df[edited_df["HARGA PENAWARAN"] > 0].copy()
+            if df_valid.empty:
+                st.error("Mohon isi minimal satu harga penawaran di atas Rp 0.")
             else:
-                kode_sup = supplier_info["KODE SUPPLIER"] if supplier_info is not None else "GUEST"
-                nama_sup = supplier_info["NAMA SUPPLIER"] if supplier_info is not None else "Supplier External"
-
-                new_entry = pd.DataFrame([{
-                    "KODE SUPPLIER": kode_sup,
-                    "NAMA SUPPLIER": nama_sup,
-                    "NAMA BB": nama_barang,
-                    "HARGA PER SATUAN": harga_penawaran,
-                    "SATUAN": satuan,
-                    "KATEGORI": kategori_pilihan,
-                    "CATATAN": catatan
-                }])
-
-                st.session_state["df_harga_bb"] = pd.concat([st.session_state["df_harga_bb"], new_entry], ignore_index=True)
+                df_valid["KODE SUPPLIER"] = kode_sup
+                df_valid["NAMA SUPPLIER"] = nama_sup
+                cols_order = ["KODE SUPPLIER", "NAMA SUPPLIER", "P/N", "JENIS BB", "ITEM BB", "SATUAN", "HARGA PENAWARAN", "CATATAN"]
+                df_final = df_valid[cols_order]
+                
+                save_penawaran_permanen(df_final)
+                st.session_state["df_harga_bb"] = load_penawaran_permanen()
                 st.balloons()
-                st.success(f"Berhasil! Penawaran untuk **{nama_barang}** seharga **Rp {harga_penawaran:,}** telah tersimpan.")
+                st.success(f"Berhasil! {len(df_final)} penawaran harga dari **{nama_sup}** telah tersimpan di sistem.")
+
+    with tab_single:
+        with st.form("form_input_harga_supplier_single"):
+            st.subheader("🛒 Input Single Item Penawaran")
+            nama_barang = st.text_input("Nama Bahan Baku / Barang", placeholder="Contoh: Telur Ayam Ras / Minyak Goreng")
+            
+            c1, c2 = st.columns(2)
+            with c1:
+                harga_penawaran = st.number_input("Harga Penawaran (Rp)", min_value=0, step=500, value=10000)
+                satuan = st.selectbox("Satuan", ["Kg", "Liter", "Ikat", "Pcs", "Karton", "Ekor", "Pack", "Sisir"])
+            with c2:
+                kategori_pilihan = st.selectbox(
+                    "Kategori Barang", 
+                    options=[
+                        "Ayam", "Beras", "Buah", "Cookies", "Daging", "Ikan", 
+                        "Keju", "Olahan", "Sayur", "Sembako", "Susu", "Tahu", 
+                        "Tempe", "Telur Ayam", "Telur Bebek", "Telur Puyuh"
+                    ]
+                )
+                catatan = st.text_input("Catatan / Merek (Opsional)", placeholder="Contoh: Ukuran Medium, Fresh")
+
+            submit_harga = st.form_submit_button("🚀 Kirim Penawaran Item Ini", use_container_width=True)
+
+            if submit_harga:
+                if nama_barang.strip() == "":
+                    st.error("Mohon isi nama barang terlebih dahulu.")
+                else:
+                    new_entry = pd.DataFrame([{
+                        "KODE SUPPLIER": kode_sup,
+                        "NAMA SUPPLIER": nama_sup,
+                        "P/N": "CUSTOM",
+                        "JENIS BB": kategori_pilihan,
+                        "ITEM BB": nama_barang,
+                        "SATUAN": satuan,
+                        "HARGA PENAWARAN": harga_penawaran,
+                        "CATATAN": catatan
+                    }])
+                    save_penawaran_permanen(new_entry)
+                    st.session_state["df_harga_bb"] = load_penawaran_permanen()
+                    st.balloons()
+                    st.success(f"Berhasil! Penawaran untuk **{nama_barang}** seharga **Rp {harga_penawaran:,}** telah tersimpan.")
 
     st.stop()  # Berhenti di sini khusus untuk akses vendor via token
 
@@ -332,7 +417,7 @@ if menu == "📊 Dashboard & HET":
     m1, m2, m3, m4 = st.columns(4)
     m1.metric("Total Dapur SPPG", len(st.session_state["df_dapur_state"]), delta="Aktif")
     m2.metric("Total Supplier", len(st.session_state["df_supplier_state"]), delta="Terdaftar")
-    m3.metric("Kategori Barang", "16 Kategori", delta="Lengkap")
+    m3.metric("Penawaran Masuk", len(st.session_state["df_harga_bb"]), delta="Item")
     m4.metric("Rata-rata Ketepatan", "94.2%", delta="+1.5%")
 
 # ---------------------------------------------------------
@@ -447,7 +532,7 @@ elif menu == "🤝 Data Supplier & Link Form":
     st.markdown("---")
     st.dataframe(st.session_state["df_supplier_state"], use_container_width=True)
 
-    # Export Data Button
+    # Export Data Button Multi-Sheet
     output = io.BytesIO()
     with pd.ExcelWriter(output) as writer:
         st.session_state["df_harga_bb"].to_excel(writer, index=False, sheet_name='UPDATE HARGA BB')
@@ -466,22 +551,13 @@ elif menu == "🤝 Data Supplier & Link Form":
 # MODUL 4: WA & PO GENERATOR
 # ---------------------------------------------------------
 elif menu == "💬 WA & PO Generator":
-
     st.subheader("💬 WhatsApp Generator - Update Penawaran Harga Supplier")
-
     df_supplier = st.session_state["df_supplier_state"].copy()
 
     if df_supplier.empty:
         st.warning("⚠️ Data supplier masih kosong. Silakan upload data supplier terlebih dahulu.")
-
     else:
-
-        # =====================================================
-        # TEMPLATE PESAN
-        # =====================================================
-
         st.markdown("### 📝 Template Pesan WhatsApp")
-
         template_default = """Halo Bapak/Ibu {nama_supplier} 👋
 
 Kami dari *Koperasi YK - Procurement SPPG*.
@@ -502,23 +578,16 @@ Sistem Procurement SPPG"""
         template_pesan = st.text_area(
             "Edit Template Pesan",
             value=template_default,
-            height=300,
+            height=280,
             help="Gunakan {nama_supplier} untuk nama supplier dan {link_form} untuk link penawaran."
         )
 
         st.markdown("---")
-
-        # =====================================================
-        # FILTER SUPPLIER
-        # =====================================================
-
         st.markdown("### 🎯 Pilih Supplier")
-
         col1, col2 = st.columns([2, 1])
 
         with col1:
             list_supplier = df_supplier["NAMA SUPPLIER"].dropna().tolist()
-
             selected_supplier = st.multiselect(
                 "Pilih Supplier yang akan dikirim",
                 options=list_supplier,
@@ -526,147 +595,83 @@ Sistem Procurement SPPG"""
             )
 
         with col2:
-            st.metric(
-                "Supplier Dipilih",
-                len(selected_supplier)
-            )
+            st.metric("Supplier Dipilih", len(selected_supplier))
 
         st.markdown("---")
-
-        # =====================================================
-        # TABEL GENERATOR WA
-        # =====================================================
-
         st.markdown("### 📱 Kirim Link Penawaran Harga")
 
-        df_selected = df_supplier[
-            df_supplier["NAMA SUPPLIER"].isin(selected_supplier)
-        ].copy()
+        df_selected = df_supplier[df_supplier["NAMA SUPPLIER"].isin(selected_supplier)].copy()
 
         if df_selected.empty:
             st.info("Pilih minimal satu supplier.")
-
         else:
-
-            # Header
-            h1, h2, h3, h4, h5 = st.columns([1, 2.5, 1.5, 3, 1])
-
+            h1, h2, h3, h4, h5 = st.columns([0.5, 2.5, 1.5, 3, 1])
             h1.markdown("**NO**")
             h2.markdown("**SUPPLIER**")
             h3.markdown("**NO WA**")
             h4.markdown("**LINK FORM**")
             h5.markdown("**KIRIM**")
-
             st.markdown("---")
 
-            # Loop Supplier
             for idx, row in df_selected.iterrows():
-
                 nomor = row.get("NO WA", "")
                 nama = row.get("NAMA SUPPLIER", "")
                 link = row.get("LINK FORM", "")
 
-                # Generate pesan
-                pesan = template_pesan.format(
-                    nama_supplier=nama,
-                    link_form=link
-                )
-
-                # Encode WhatsApp
+                pesan = template_pesan.format(nama_supplier=nama, link_form=link)
                 pesan_encoded = urllib.parse.quote(pesan)
-
                 wa_link = f"https://wa.me/{nomor}?text={pesan_encoded}"
 
-                c1, c2, c3, c4, c5 = st.columns(
-                    [1, 2.5, 1.5, 3, 1]
-                )
-
+                c1, c2, c3, c4, c5 = st.columns([0.5, 2.5, 1.5, 3, 1])
                 c1.write(idx + 1)
-
                 c2.write(nama)
-
                 c3.write(nomor)
-
-                c4.code(
-                    link,
-                    language=None
-                )
-
-                c5.link_button(
-                    "💬 WA",
-                    wa_link,
-                    use_container_width=True
-                )
+                c4.code(link, language=None)
+                c5.link_button("💬 WA", wa_link, use_container_width=True)
 
         st.markdown("---")
-
-        # =====================================================
-        # PREVIEW PESAN
-        # =====================================================
-
         st.markdown("### 👀 Preview Pesan")
-
         if not df_selected.empty:
-
-            preview_supplier = st.selectbox(
-                "Pilih supplier untuk preview",
-                df_selected["NAMA SUPPLIER"].tolist()
-            )
-
-            preview_row = df_selected[
-                df_selected["NAMA SUPPLIER"] == preview_supplier
-            ].iloc[0]
-
+            preview_supplier = st.selectbox("Pilih supplier untuk preview", df_selected["NAMA SUPPLIER"].tolist())
+            preview_row = df_selected[df_selected["NAMA SUPPLIER"] == preview_supplier].iloc[0]
             preview_message = template_pesan.format(
                 nama_supplier=preview_row["NAMA SUPPLIER"],
                 link_form=preview_row["LINK FORM"]
             )
-
             st.info(preview_message)
-
 
 # ---------------------------------------------------------
 # MODUL 5: MATRIKS JARAK
 # ---------------------------------------------------------
 elif menu == "🚛 Matriks Jarak":
-
     st.subheader("🚛 Matriks Jarak Supplier ke Dapur")
-
     st.info("""
     Modul ini nantinya akan menghitung:
-
     • Jarak Supplier → Dapur  
     • Supplier terdekat per dapur  
     • Ranking jarak  
     • Estimasi biaya logistik  
     """)
 
-
 # ---------------------------------------------------------
 # MODUL 6: SCORING & EVALUASI
 # ---------------------------------------------------------
 elif menu == "🎯 Scoring & Evaluasi":
-
     st.subheader("🎯 Supplier Scoring & Evaluation")
-
     st.info("""
     Sistem evaluasi akan menggunakan beberapa parameter:
-
-    💰 Harga
-    🚛 Jarak
-    📦 Coverage Item
-    ⭐ Rating Supplier
-    ⏱ Ketepatan Pengiriman
+    💰 Harga  
+    🚛 Jarak  
+    📦 Coverage Item  
+    ⭐ Rating Supplier  
+    ⏱ Ketepatan Pengiriman  
 
     Semua parameter akan digabung menjadi Supplier Score.
     """)
-
 
 # ---------------------------------------------------------
 # MODUL 7: HET & KOMPARASI PASAR
 # ---------------------------------------------------------
 elif menu == "📈 HET & Komparasi Pasar":
-
     st.subheader("📈 HET & Komparasi Harga Pasar")
-
     st.info("Modul monitoring HET dan harga pasar sedang disiapkan.")
